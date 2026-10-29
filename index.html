@@ -296,6 +296,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .welcome .two .secondary{padding:12px 8px;font-size:14px}
 .prog{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
 .prog i{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width 300ms var(--ease-out)}
+#add{background:#0F9467!important} /* PRUEBA 1.2 */
 </style>
 </head>
 <body>
@@ -370,8 +371,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 const CHANGELOG = [
+  {v:'1.2', items:['Versión de prueba: el botón + ahora es verde. Lo quitaremos enseguida.']},
   {v:'1.1', items:[
     'Las nuevas versiones llegan en cuanto abres la app, sin esperar.',
     'Cuando la app se actualice, te contaremos aquí qué ha cambiado.',
@@ -1223,7 +1225,7 @@ function toast(msg, undo){
 }
 
 /* What's new: a card after an update, closed with Entendido */
-const vnum = v => v.split('.').map(Number).reduce((a, x) => a * 1000 + x, 0);
+const vnum = v => { const p = v.split('.').map(Number); return (p[0] || 0) * 1e6 + (p[1] || 0) * 1e3 + (p[2] || 0); };
 function whatsNew(){
   let seen = null; try { seen = localStorage.getItem(SEEN_KEY); } catch (e) {}
   const mark = () => { try { localStorage.setItem(SEEN_KEY, APP_VERSION); } catch (e) {} };

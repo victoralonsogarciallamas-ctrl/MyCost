@@ -390,7 +390,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.5';
 const CHANGELOG = [
-  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.']},
+  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
@@ -417,6 +417,10 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TODAY = new Date(); const TY = TODAY.getFullYear(), TM = TODAY.getMonth(), TD = TODAY.getDate();
 const todayIso = iso(TY, TM, TD);
+// The real date right now: the app can stay open in the background for days, so the form never relies on the load date.
+const nowIso = () => { const d = new Date(); return iso(d.getFullYear(), d.getMonth(), d.getDate()); };
+// Coming back on a later day: reload so "today", the current month and the charts all move to the new date.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && nowIso() !== todayIso && !$('#sheet').classList.contains('on')) location.reload(); });
 
 const DEFAULT_CATS = [
   {id:'super', name:'Supermercado', color:'#3B7DD8'},
@@ -995,8 +999,8 @@ function setMode(m){
 function fillForm(e){
   $('#f-amount').value = e && e.amount ? String(e.amount).replace('.', ',') : '';
   $('#f-concept').value = e ? e.concept : '';
-  $('#f-date').value = e ? e.date : todayIso;
-  $('#f-date').max = todayIso;
+  $('#f-date').value = e && e.date ? e.date : nowIso();
+  $('#f-date').max = nowIso();
   setKind(e && e.cat && catById(e.cat).inc ? 'ingreso' : 'gasto', e ? e.cat : 'super');
   setPay(e && e.pay ? e.pay : lastPayFor(e && e.cat ? e.cat : 'super'));
   $('#f-err').hidden = true;
@@ -1033,7 +1037,7 @@ $('#p-manual').addEventListener('submit', ev => {
   if (!(amount > 0)) { $('#f-err').hidden = false; $('#f-amount').focus(); return; }
   const cat = (document.querySelector('input[name="f-cat"]:checked') || {}).value || 'otros';
   const concept = $('#f-concept').value.trim() || catById(cat).name;
-  const date = $('#f-date').value || todayIso;
+  const date = $('#f-date').value || nowIso();
   const p = catById(cat).inc ? (pay === 'pluxee' ? 'pluxee' : 'cuenta') : (PAYS.some(x => x.id === pay) ? pay : 'debito');
   if (editId){ Object.assign(S.expenses.find(x => x.id === editId), {amount, cat, concept, date, pay: p}); toast('Cambios guardados'); }
   else { S.expenses.push({id:uid(), date, amount, concept, cat, source, pay: p}); toast(kind === 'ingreso' ? 'Ingreso guardado' : 'Gasto guardado'); }

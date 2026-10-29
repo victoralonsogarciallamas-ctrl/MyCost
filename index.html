@@ -413,7 +413,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.13';
 const CHANGELOG = [
-  {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.']},
+  {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.', 'El plan de Ahorro se calcula con tu nómina: los reembolsos y otros ingresos ya no cambian la meta.']},
   {v:'1.12', items:['La tarjeta de Pluxee muestra lo que te sobró el mes anterior, que se suma a lo que recibes este mes.']},
   {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
   {v:'1.10', items:['Los filtros de mes de Inicio y Movimientos muestran todos los meses del año, aunque no tengan movimientos.']},
@@ -511,6 +511,8 @@ const expOf = list => list.filter(e => !isInc(e) && !isXfer(e));
 const incOf = list => list.filter(isInc);
 // Pluxee is its own wallet, so savings only look at the bank account: income received there and spending not paid with Pluxee.
 const acctInc = list => incOf(list).filter(e => payOf(e) !== 'pluxee');
+// The savings plan works from the salary alone, so refunds and other income don't move the goal.
+const nominaOf = list => acctInc(list).filter(e => e.cat === 'nomina');
 const acctExp = list => expOf(list).filter(e => payOf(e) !== 'pluxee');
 const inMonth = (y, m) => { const p = `${y}-${pad(m + 1)}-`; return S.expenses.filter(e => e.date.startsWith(p)); };
 const total = list => r2(list.reduce((s, e) => s + e.amount, 0));
@@ -856,7 +858,7 @@ function history6(y, m){
   const months = [];
   for (let k = 1; k <= 6; k++){ const [yy, mm] = shift(by, bm, -k); const l = inMonth(yy, mm); if (l.length) months.push(l); }
   const n = months.length || 1;
-  const incs = months.map(l => total(acctInc(l))).filter(v => v > 0).sort((a, b) => a - b);
+  const incs = months.map(l => total(nominaOf(l))).filter(v => v > 0).sort((a, b) => a - b);
   const med = !incs.length ? 0 : incs.length % 2 ? incs[(incs.length - 1) / 2] : (incs[incs.length / 2 - 1] + incs[incs.length / 2]) / 2;
   const avg = {}; months.forEach(l => acctExp(l).forEach(e => { avg[e.cat] = (avg[e.cat] || 0) + e.amount / n; }));
   return {med, avg, n: months.length};
@@ -868,7 +870,7 @@ function getPlan(k){
 }
 function ensurePlan(k){ if (!S.plans[k]) S.plans[k] = {...getPlan(k)}; return S.plans[k]; }
 function monthIncome(k){
-  const [y, m] = ymSplit(k), pl = getPlan(k), real = total(acctInc(inMonth(y, m))), med = Math.round(history6(y, m).med);
+  const [y, m] = ymSplit(k), pl = getPlan(k), real = total(nominaOf(inMonth(y, m))), med = Math.round(history6(y, m).med);
   if (pl.income !== null) return {v: pl.income, src: 'manual'};
   if (real > 0 && (real >= med * .5 || k < CUR)) return {v: real, src: 'real'};
   return {v: med, src: 'estimado', med};
@@ -900,8 +902,8 @@ function renderPlan(){
   const k = planYM, [y, m] = ymSplit(k), pl = getPlan(k), inc = monthIncome(k), h = history6(y, m);
   const opts = planMonths().map(x => `<button role="option" data-pym="${x}" aria-selected="${x === k}"><span>${ymLabel(x)}</span><span class="num">${x > CUR ? 'próximo' : x === CUR ? 'actual' : (getPlan(x).pct + '%')}</span></button>`).join('');
   const srcTxt = inc.src === 'manual' ? 'Lo has fijado tú para este mes.' :
-    inc.src === 'real' ? `Es lo que has ingresado en ${monthLong(y, m)}.` :
-    !h.med ? `Escribe cuánto vas a ingresar en ${monthLong(y, m)}. Cuando registres tu nómina lo tomaré de ahí.` :
+    inc.src === 'real' ? `Es tu nómina de ${monthLong(y, m)}.` :
+    !h.med ? `Escribe tu nómina de ${monthLong(y, m)}. Cuando registres tu nómina lo tomaré de ahí.` :
     `Estimado: aún no has registrado tu nómina de ${monthLong(y, m)}, así que uso ${h.n === 1 ? 'la del mes anterior' : `la mediana de los últimos ${h.n} meses`}.`;
   $('#v-ahorro').innerHTML = `<header class="vhead"><h1>Ahorro</h1>
       <div class="dd"><button class="ddbtn" aria-haspopup="listbox" aria-expanded="false">${cap(monthShort(y, m))} ${y}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -911,7 +913,7 @@ function renderPlan(){
       <div class="goalrow"><output class="goalpct" id="g-out" for="g-pct">${pl.pct}%</output><span class="muted" id="g-sub"></span></div>
       <input type="range" id="g-pct" min="0" max="50" step="1" value="${pl.pct}" aria-label="Porcentaje de los ingresos de ${monthLong(y, m)} que quieres ahorrar" style="--p:${pl.pct * 2}%">
       <div class="ticks small muted"><span>0%</span><span>25%</span><span>50%</span></div>
-      <label class="incrow" for="g-inc"><span>Ingresos de ${monthLong(y, m)}</span><span class="incin"><input id="g-inc" inputmode="decimal" value="${String(r2(inc.v)).replace('.', ',')}" autocomplete="off" enterkeyhint="done">€</span></label>
+      <label class="incrow" for="g-inc"><span>Nómina de ${monthLong(y, m)}</span><span class="incin"><input id="g-inc" inputmode="decimal" value="${String(r2(inc.v)).replace('.', ',')}" autocomplete="off" enterkeyhint="done">€</span></label>
       <p class="small muted" style="margin-top:8px" id="g-src">${srcTxt}${inc.src === 'manual' ? ' <button class="link small" id="g-reset">Usar el valor automático</button>' : ''}</p>
     </div>
     <div id="plan-res" style="display:flex;flex-direction:column;gap:22px"></div>

@@ -594,7 +594,7 @@ function renderInicio(){
 /* The three figures under the month card follow the payment filter. */
 function noteStats(y, m, income, saved, ratio){
   const st = (label, v, cls = '') => `<div><span>${label}</span><strong class="${cls}">${v}</strong></div>`, pct = getPlan(ymKey(y, m)).pct;
-  const goal = (inc, sv) => { const r = inc ? Math.round(sv / inc * 100) : null; return st(`Meta ${pct}%`, r === null ? 'sin datos' : r + '%', r !== null && r >= pct ? 'down' : ''); };
+  const goal = (inc, sv) => { const r = inc ? Math.round(sv / inc * 100) : null; return st('Ahorro %', r === null ? 'sin datos' : r + '%', r !== null && r >= pct ? 'down' : ''); };
   const left = sv => st(sv >= 0 ? 'Ahorro' : 'Te faltan', eur0.format(Math.abs(sv)), sv >= 0 ? 'down' : 'up');
   let out;
   if (H.pay === 'debito'){

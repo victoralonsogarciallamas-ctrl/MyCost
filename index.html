@@ -312,6 +312,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .payrow{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:baseline;padding-block:6px}
 .payrow .pc{color:var(--muted);font-size:13px;min-width:38px;text-align:right}
 [hidden]{display:none!important}
+.plxc{color:#13A39A}
 .plx{margin-top:10px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#13A39A 12%,var(--surface));display:flex;flex-direction:column;gap:4px}
 .plx>div{display:flex;justify-content:space-between;align-items:baseline}
 .plx strong{font-family:var(--display);font-size:22px}
@@ -405,8 +406,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.10';
+const APP_VERSION = '1.11';
 const CHANGELOG = [
+  {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
   {v:'1.10', items:['Los filtros de mes de Inicio y Movimientos muestran todos los meses del año, aunque no tengan movimientos.']},
   {v:'1.9', items:['En Inicio, toca el mes de la tarjeta para ver cualquier mes anterior: lo gastado, la cuenta de ahorro, en qué se fue y cómo pagaste.']},
   {v:'1.8', items:['La tarjeta de la cuenta de ahorro queda más limpia: quitamos la etiqueta "Solo entra dinero".']},
@@ -500,6 +502,9 @@ const isInc = e => !!catById(e.cat).inc;
 const isXfer = e => !!catById(e.cat).xfer;
 const expOf = list => list.filter(e => !isInc(e) && !isXfer(e));
 const incOf = list => list.filter(isInc);
+// Pluxee is its own wallet, so savings only look at the bank account: income received there and spending not paid with Pluxee.
+const acctInc = list => incOf(list).filter(e => payOf(e) !== 'pluxee');
+const acctExp = list => expOf(list).filter(e => payOf(e) !== 'pluxee');
 const inMonth = (y, m) => { const p = `${y}-${pad(m + 1)}-`; return S.expenses.filter(e => e.date.startsWith(p)); };
 const total = list => r2(list.reduce((s, e) => s + e.amount, 0));
 const byCat = list => { const o = {}; list.forEach(e => { o[e.cat] = (o[e.cat] || 0) + e.amount; }); return o; };
@@ -534,7 +539,7 @@ function renderInicio(){
   const ofMonth = isCur ? 'este mes' : `en ${monthLong(HY, HM)}`;
 
   const cats = Object.entries(byCat(expOf(inMonth(HY, HM)))).sort((a, b) => b[1] - a[1]);
-  const income = total(incOf(inMonth(HY, HM))), saved = r2(income - spent);
+  const income = total(acctInc(inMonth(HY, HM))), saved = r2(income - total(acctExp(inMonth(HY, HM))));
   const balance = `<div class="panel bal">
     <div><span class="muted small">Ingresos</span><strong class="num down">+${eur.format(income)}</strong></div>
     <div><span class="muted small">Gastos</span><strong class="num">${eur.format(spent)}</strong></div>
@@ -569,6 +574,7 @@ function renderInicio(){
     </div>
     <div class="panel"><h2>${isCur ? 'En qué se va este mes' : `En qué se fue en ${monthLong(HY, HM)}`}</h2>${catRows || `<p class="muted">No hay gastos ${ofMonth}.${isCur ? ' Añade el primero con el botón +.' : ''}</p>`}</div>
     ${spent ? payPanel(expOf(inMonth(HY, HM)), expOf(inMonth(py, pm)), prevName, HY, HM) : ''}
+    ${pluxeePanel(HY, HM)}
     ${creditPanel(HY, HM)}
     <div><h2>${isCur ? 'Últimos movimientos' : `Movimientos de ${monthLong(HY, HM)}`}</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
@@ -581,10 +587,20 @@ function payPanel(list, prevList, prevName, y = TY, m = TM){
   const rows = PAYS.map(x => { const d = cur[x.id] - prev[x.id];
     return `<div class="payrow"><i class="paysw" style="background:${x.color}"></i><span>${x.name}${prev[x.id] || cur[x.id] ? `<span class="small muted" style="display:block">${Math.abs(d) < 1 ? 'igual que' : `${eur0.format(Math.abs(d))} ${d > 0 ? 'más' : 'menos'} que`} en ${prevName}</span>` : ''}</span>
       <span class="num">${eur.format(cur[x.id])}</span><span class="pc">${Math.round(cur[x.id] / tot * 100)}%</span></div>`; }).join('');
-  const pm = pluxee(inMonth(y, m)), pa = pluxee(S.expenses.filter(e => e.date < ymKey(...shift(y, m, 1)) + '-01'));
-  const plx = pm.inc || pm.out || pa.inc ? `<div class="plx"><div><span class="small muted">Saldo Pluxee</span><strong class="num ${pa.bal < 0 ? 'up' : ''}">${eur.format(pa.bal)}</strong></div>
-    <p class="small muted">${y === TY && m === TM ? 'Este mes' : `En ${monthLong(y, m)}`} has recibido ${eur.format(pm.inc)} y gastado ${eur.format(pm.out)}${pm.inc ? `, el ${Math.round(Math.min(pm.out / pm.inc, 9.99) * 100)}% de la carga` : ''}.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga de Pluxee.' : ''}</p></div>` : '';
-  return `<div class="panel"><h2>Cómo pagas ${y === TY && m === TM ? 'este mes' : `en ${monthLong(y, m)}`}</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}${plx}</div>`;
+  return `<div class="panel"><h2>Cómo pagas ${y === TY && m === TM ? 'este mes' : `en ${monthLong(y, m)}`}</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}</div>`;
+}
+
+/* Pluxee is a separate wallet: what was loaded and spent this month, and what is left to use. */
+function pluxeePanel(y = TY, m = TM){
+  const pm = pluxee(inMonth(y, m)), pa = pluxee(S.expenses.filter(e => e.date < ymKey(...shift(y, m, 1)) + '-01')), isCur = y === TY && m === TM;
+  if (!pm.inc && !pm.out && !pa.inc && !pa.out) return '';
+  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Pluxee</h2><span class="small muted">${cap(monthLong(y, m))}</span></div>
+    <div class="cc">
+      <div><span class="small muted">Recibido</span><strong class="num down">+${eur.format(pm.inc)}</strong></div>
+      <div><span class="small muted">Gastado</span><strong class="num">${eur.format(pm.out)}</strong></div>
+      <div><span class="small muted">Disponible</span><strong class="num ${pa.bal < 0 ? 'up' : 'plxc'}">${eur.format(pa.bal)}</strong></div>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">${isCur ? 'Saldo que te queda hoy en la tarjeta.' : `Saldo que te quedaba a final de ${monthLong(y, m)}.`} Pluxee va aparte: no cuenta en tus ingresos ni en tu ahorro.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga.' : ''}</p></div>`;
 }
 
 /* Credit card cycle: purchases of one month are charged to the account early the next month,
@@ -628,7 +644,7 @@ function savingsAcc(y, m){
 function savingsPanel(y = TY, m = TM){
   const a = savingsAcc(y, m), [py, pm] = shift(y, m, -1), prev = savingsAcc(py, pm).month, isCur = y === TY && m === TM;
   if (!a.any) return '';
-  const inc = total(incOf(inMonth(y, m))), sav = r2(inc - total(expOf(inMonth(y, m))));
+  const inc = total(acctInc(inMonth(y, m))), sav = r2(inc - total(acctExp(inMonth(y, m))));
   const pl = getPlan(ymKey(y, m)), goal = monthIncome(ymKey(y, m)).v * pl.pct / 100;
   const hint = !isCur ? (sav > 0 && a.month < sav - 1 ? `Te sobraron ${eur0.format(sav - a.month)} que no pasaste a ahorro.` : '') : sav > 0 && a.month < sav - 1 ? `Aún podrías pasar ${eur0.format(sav - a.month)} de lo que te sobra.` : a.month ? `Pasaste a ahorro todo lo que te sobró ${isCur ? 'este mes' : `en ${monthLong(y, m)}`}.` : 'Aún no has pasado nada a ahorro este mes.';
   return `<div class="note-card save" id="savecard"><canvas id="save-art" aria-hidden="true"></canvas>
@@ -827,9 +843,9 @@ function history6(y, m){
   const months = [];
   for (let k = 1; k <= 6; k++){ const [yy, mm] = shift(by, bm, -k); const l = inMonth(yy, mm); if (l.length) months.push(l); }
   const n = months.length || 1;
-  const incs = months.map(l => total(incOf(l))).filter(v => v > 0).sort((a, b) => a - b);
+  const incs = months.map(l => total(acctInc(l))).filter(v => v > 0).sort((a, b) => a - b);
   const med = !incs.length ? 0 : incs.length % 2 ? incs[(incs.length - 1) / 2] : (incs[incs.length / 2 - 1] + incs[incs.length / 2]) / 2;
-  const avg = {}; months.forEach(l => expOf(l).forEach(e => { avg[e.cat] = (avg[e.cat] || 0) + e.amount / n; }));
+  const avg = {}; months.forEach(l => acctExp(l).forEach(e => { avg[e.cat] = (avg[e.cat] || 0) + e.amount / n; }));
   return {med, avg, n: months.length};
 }
 function getPlan(k){
@@ -839,7 +855,7 @@ function getPlan(k){
 }
 function ensurePlan(k){ if (!S.plans[k]) S.plans[k] = {...getPlan(k)}; return S.plans[k]; }
 function monthIncome(k){
-  const [y, m] = ymSplit(k), pl = getPlan(k), real = total(incOf(inMonth(y, m))), med = Math.round(history6(y, m).med);
+  const [y, m] = ymSplit(k), pl = getPlan(k), real = total(acctInc(inMonth(y, m))), med = Math.round(history6(y, m).med);
   if (pl.income !== null) return {v: pl.income, src: 'manual'};
   if (real > 0 && (real >= med * .5 || k < CUR)) return {v: real, src: 'real'};
   return {v: med, src: 'estimado', med};
@@ -902,7 +918,7 @@ function renderPlan(){
 function planHistory(){
   const rows = [];
   for (let i = 0; i < 6; i++){
-    const [y, m] = shift(TY, TM, -i), k = ymKey(y, m), l = inMonth(y, m), inc = total(incOf(l)), sp = total(expOf(l));
+    const [y, m] = shift(TY, TM, -i), k = ymKey(y, m), l = inMonth(y, m), inc = total(acctInc(l)), sp = total(acctExp(l));
     const pct = getPlan(k).pct, real = inc ? Math.round((inc - sp) / inc * 100) : null;
     const chip = k === CUR ? '<span class="badge">en curso</span>' : real === null ? '<span class="badge">sin ingresos</span>' :
       real >= pct ? '<span class="badge ok">cumplido</span>' : '<span class="badge ko">no cumplido</span>';
@@ -915,7 +931,7 @@ function renderPlanRes(){
   const k = planYM, [y, m] = ymSplit(k), pl = getPlan(k), income = monthIncome(k).v, pct = pl.pct;
   const P = makePlan(income, pct, y, m), save = income * pct / 100, future = k > CUR, past = k < CUR;
   $('#g-sub').textContent = `${eur0.format(save)} este mes`;
-  const now = byCat(expOf(inMonth(y, m)));
+  const now = byCat(acctExp(inMonth(y, m)));
   let status;
   if (!income) status = 'Añade los ingresos de este mes para calcular el plan.';
   else if (P.need <= 0) status = `<b class="down">Te llega sin recortar.</b> De media gastas ${eur0.format(P.totalAvg)} al mes, así que te sobran ${eur0.format(-P.need)}.`;

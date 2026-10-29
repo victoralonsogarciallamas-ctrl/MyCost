@@ -413,7 +413,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.14';
 const CHANGELOG = [
-  {v:'1.14', items:['La tarjeta de lo gastado se abre con el filtro Débito. Pulsa Todo para ver el total.']},
+  {v:'1.14', items:['La tarjeta de lo gastado se abre con el filtro Débito. Pulsa Todo para ver el total.', 'Las cifras de abajo de la tarjeta cambian con el filtro. Con Débito ves lo que te queda en la cuenta, cargo de la tarjeta incluido, y tu meta de ahorro, que solo se mide ahí. Con Crédito ves lo reembolsado y lo pendiente, y con Pluxee lo recibido y el saldo disponible.']},
   {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.', 'El plan de Ahorro se calcula con tu nómina: los reembolsos y otros ingresos ya no cambian la meta.']},
   {v:'1.12', items:['La tarjeta de Pluxee muestra lo que te sobró el mes anterior, que se suma a lo que recibes este mes.']},
   {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
@@ -580,11 +580,7 @@ function renderInicio(){
       <div class="notepay" role="group" aria-label="Filtrar por método de pago">${[{id:'todos', name:'Todo'}, ...PAYS].map(x => `<button type="button" data-hpay="${x.id}" aria-pressed="${H.pay === x.id}">${x.name}</button>`).join('')}</div>
       <p class="note-amt" id="note-amt" data-v="${spent}">${amtHtml(spent)}</p>
       <p class="note-delta">${deltaTxt}</p>
-      <div class="note-stats">
-        <div><span>Ingresos</span><strong>${eur0.format(income)}</strong></div>
-        <div><span>${saved >= 0 ? 'Ahorro' : 'Te faltan'}</span><strong class="${saved >= 0 ? 'down' : 'up'}">${eur0.format(Math.abs(saved))}</strong></div>
-        <div><span>Meta ${getPlan(hk).pct}%</span><strong class="${ratio !== null && ratio >= getPlan(hk).pct ? 'down' : ''}">${ratio === null ? 'sin datos' : ratio + '%'}</strong></div>
-      </div>
+      ${noteStats(HY, HM, income, saved, ratio)}
     </div>
     <div class="panel"><h2>${isCur ? 'En qué se va este mes' : `En qué se fue en ${monthLong(HY, HM)}`}</h2>${catRows || `<p class="muted">No hay gastos ${ofMonth}.${isCur ? ' Añade el primero con el botón +.' : ''}</p>`}</div>
     ${expOf(inMonth(HY, HM)).length ? payPanel(expOf(inMonth(HY, HM)), expOf(inMonth(py, pm)), prevName, HY, HM) : ''}
@@ -593,6 +589,26 @@ function renderInicio(){
     <div><h2>${isCur ? 'Últimos movimientos' : `Movimientos de ${monthLong(HY, HM)}`}</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
   paintNote(); paintSave();
+}
+
+/* The three figures under the month card follow the payment filter. */
+function noteStats(y, m, income, saved, ratio){
+  const st = (label, v, cls = '') => `<div><span>${label}</span><strong class="${cls}">${v}</strong></div>`, pct = getPlan(ymKey(y, m)).pct;
+  const goal = (inc, sv) => { const r = inc ? Math.round(sv / inc * 100) : null; return st(`Meta ${pct}%`, r === null ? 'sin datos' : r + '%', r !== null && r >= pct ? 'down' : ''); };
+  const left = sv => st(sv >= 0 ? 'Ahorro' : 'Te faltan', eur0.format(Math.abs(sv)), sv >= 0 ? 'down' : 'up');
+  let out;
+  if (H.pay === 'debito'){
+    // What actually leaves the account: debit spending plus the credit card charge.
+    const l = inMonth(y, m), sv = r2(income - total(byPayOf(expOf(l), 'debito')) - total(l.filter(e => e.cat === 'pagotarjeta')));
+    out = st('Ingresos', eur0.format(income)) + left(sv) + goal(income, sv);
+  } else if (H.pay === 'credito'){
+    const c = creditCycle(y, m);
+    out = st('Reembolsado', eur0.format(c.back), 'down') + st('Pendiente', eur0.format(c.pending), c.pending ? 'up' : '') + st('Recuperado', c.bought ? Math.round(c.back / c.bought * 100) + '%' : '-', c.bought && c.back >= c.bought - 1 ? 'down' : '');
+  } else if (H.pay === 'pluxee'){
+    const pm = pluxee(inMonth(y, m)), pa = pluxee(S.expenses.filter(e => e.date < ymKey(...shift(y, m, 1)) + '-01'));
+    out = st('Recibido', eur0.format(pm.inc)) + st('Disponible', eur0.format(pa.bal), pa.bal < 0 ? 'up' : 'down') + st('Usado', pm.inc ? Math.round(pm.out / pm.inc * 100) + '%' : '-');
+  } else out = st('Ingresos', eur0.format(income)) + left(saved); // The savings goal only applies to the debit account.
+  return `<div class="note-stats">${out}</div>`;
 }
 
 function payPanel(list, prevList, prevName, y = TY, m = TM){

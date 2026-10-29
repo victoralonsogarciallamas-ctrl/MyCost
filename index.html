@@ -194,7 +194,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 /* Tab bar */
 /* Floating glass tab bar: a capsule with a sliding pill under the active tab, and the add button as its own glass circle */
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;pointer-events:none;
-  padding:0 max(14px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+  padding:0 max(14px,env(safe-area-inset-right,0px)) max(10px,calc(env(safe-area-inset-bottom,0px) - 14px)) max(14px,env(safe-area-inset-left,0px))}
 .tabwrap{max-width:480px;margin:0 auto;display:flex;align-items:center;gap:10px}
 .glass{background:var(--glass);backdrop-filter:blur(22px) saturate(180%);-webkit-backdrop-filter:blur(22px) saturate(180%);border:1px solid var(--glass-edge);box-shadow:var(--glass-shadow);pointer-events:auto}
 .pill{position:relative;flex:1;min-width:0;display:grid;grid-template-columns:repeat(4,1fr);border-radius:999px;padding:5px}
@@ -370,8 +370,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
 const CHANGELOG = [
+  {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
     'Las nuevas versiones llegan en cuanto abres la app, sin esperar.',

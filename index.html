@@ -26,6 +26,7 @@
   --up:#D33A3A; --down:#0F9467; --scrim:rgba(10,15,34,.42); --bar:rgba(243,244,248,.84);
   --glass:rgba(255,255,255,.6); --glass-edge:rgba(255,255,255,.8); --glass-shadow:0 12px 32px rgba(18,26,58,.16),0 1px 3px rgba(18,26,58,.08); --pill-on:rgba(18,26,58,.08);
   --note-bg:radial-gradient(130% 100% at 100% 0%,#2B3C93 0%,rgba(43,60,147,0) 62%),#121A3A; --note-solid:#121A3A;
+  --save-bg:radial-gradient(130% 100% at 0% 100%,#2A9D74 0%,rgba(42,157,116,0) 60%),#0D3B2E; --save-shadow:0 22px 44px -22px rgba(13,59,46,.7);
   --note-ink:#F4F5FB; --note-muted:rgba(244,245,251,.7); --note-good:#5BE3AE; --note-bad:#FF9A88; --note-shadow:0 22px 44px -22px rgba(18,26,58,.7);
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;
   --display:"Bricolage Grotesque",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
@@ -37,6 +38,7 @@
   --scrim:rgba(0,0,0,.58); --bar:rgba(20,26,51,.84);
   --glass:rgba(32,40,74,.55); --glass-edge:rgba(255,255,255,.10); --glass-shadow:0 12px 32px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.3); --pill-on:rgba(255,255,255,.12);
   --note-bg:radial-gradient(130% 100% at 100% 0%,#3B50C4 0%,rgba(59,80,196,0) 62%),#18215C; --note-solid:#18215C; --note-shadow:0 22px 44px -22px rgba(0,0,0,.9);
+  --save-bg:radial-gradient(130% 100% at 0% 100%,#2FB585 0%,rgba(47,181,133,0) 60%),#0F4434; --save-shadow:0 22px 44px -22px rgba(0,0,0,.9);
   color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0A0F22; --surface:#141A33; --surface-2:#1C2342; --ink:#EEF0F8; --muted:#9AA1C2; --line:#272F52;
@@ -44,6 +46,7 @@
   --scrim:rgba(0,0,0,.58); --bar:rgba(20,26,51,.84);
   --glass:rgba(32,40,74,.55); --glass-edge:rgba(255,255,255,.10); --glass-shadow:0 12px 32px rgba(0,0,0,.5),0 1px 3px rgba(0,0,0,.3); --pill-on:rgba(255,255,255,.12);
   --note-bg:radial-gradient(130% 100% at 100% 0%,#3B50C4 0%,rgba(59,80,196,0) 62%),#18215C; --note-solid:#18215C; --note-shadow:0 22px 44px -22px rgba(0,0,0,.9);
+  --save-bg:radial-gradient(130% 100% at 0% 100%,#2FB585 0%,rgba(47,181,133,0) 60%),#0F4434; --save-shadow:0 22px 44px -22px rgba(0,0,0,.9);
   color-scheme:dark}
 
 html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none}
@@ -77,6 +80,8 @@ h2{font-family:var(--display);font-size:19px;letter-spacing:-.02em;margin:0 0 10
 .today{font-size:13px;color:var(--muted);text-transform:capitalize}
 /* The note: the month's main card */
 .note-card{position:relative;overflow:hidden;isolation:isolate;border-radius:28px;background:var(--note-bg);color:var(--note-ink);padding:20px 20px 18px;box-shadow:var(--note-shadow)}
+.note-card.save{background:var(--save-bg);box-shadow:var(--save-shadow)}
+.note-card.save .note-amt small{color:var(--note-muted)}
 .note-card canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .note-top{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--note-muted)}
 .note-top .pill-s{border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:3px 10px;color:var(--note-ink);text-transform:capitalize}
@@ -309,6 +314,8 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .cc.sv{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
 .cc>div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cc strong{font-size:16px}
+.key .lk,.lk{display:inline-block;width:20px;height:2px;border:0;background:var(--down);position:relative;margin:0 4px 0 12px;vertical-align:middle}
+.lk::after{content:"";position:absolute;left:5px;top:-4px;width:6px;height:6px;border:2px solid var(--down);border-radius:50%;background:var(--bg)}
 .paysw{width:10px;height:10px;border-radius:3px;display:inline-block}
 .seg.pay{grid-template-columns:repeat(4,1fr);margin-top:-6px}
 .seg.pay .chip{border:0;background:none;padding:8px 2px;font-size:13.5px;border-radius:9px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
@@ -394,7 +401,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.5';
 const CHANGELOG = [
-  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
+  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'Inicio más limpio: el saldo de tu cuenta de ahorro tiene su propia tarjeta verde, y quitamos el gráfico Ritmo del mes.', 'En Evolución, los ingresos se ven como una línea con puntos sobre las barras de gasto.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
@@ -560,15 +567,13 @@ function renderInicio(){
         <div><span>Meta ${getPlan(CUR).pct}%</span><strong class="${ratio !== null && ratio >= getPlan(CUR).pct ? 'down' : ''}">${ratio === null ? 'sin datos' : ratio + '%'}</strong></div>
       </div>
     </div>
-    <div class="panel"><div class="sum"><h2 style="margin:0">Ritmo del mes</h2><span class="small muted">Gasto acumulado</span></div>
-      <figure>${svg}<figcaption><span class="key"><i></i>${cap(monthLong(TY, TM))}</span><span class="key"><i class="dash"></i>${cap(prevName)}</span></figcaption></figure></div>
+    ${savingsPanel()}
     <div class="panel"><h2>En qué se va este mes</h2>${catRows || '<p class="muted">Aún no hay gastos este mes. Añade el primero con el botón +.</p>'}</div>
     ${spent ? payPanel(expOf(inMonth(TY, TM)), expOf(inMonth(py, pm)), prevName) : ''}
-    ${savingsPanel()}
     ${creditPanel()}
     <div><h2>Últimos movimientos</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
-  paintNote();
+  paintNote(); paintSave();
 }
 
 function payPanel(list, prevList, prevName){
@@ -624,13 +629,30 @@ function savingsPanel(){
   const a = savingsAcc(TY, TM), [py, pm] = shift(TY, TM, -1), prev = savingsAcc(py, pm).month;
   if (!a.any) return '';
   const inc = total(incOf(inMonth(TY, TM))), sav = r2(inc - total(expOf(inMonth(TY, TM))));
-  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Cuenta de ahorro</h2><span class="small muted">Solo entra dinero</span></div>
-    <div class="cc sv">
-      <div><span class="small muted">Saldo</span><strong class="num">${eur0.format(a.bal)}</strong></div>
-      <div><span class="small muted">Este mes</span><strong class="num down">+${eur0.format(a.month)}</strong></div>
-      <div><span class="small muted">Mes anterior</span><strong class="num">+${eur0.format(prev)}</strong></div>
-    </div>
-    <p class="small muted" style="margin:8px 0 0">${inc ? `Has apartado el ${Math.round(a.month / inc * 100)}% de lo ingresado este mes. ` : ''}${sav > 0 && a.month < sav - 1 ? `Este mes te sobran ${eur0.format(sav)}; aún podrías pasar ${eur0.format(sav - a.month)} a ahorro.` : a.month ? 'Ya has pasado a ahorro todo lo que te sobra este mes.' : ''}</p></div>`;
+  const pl = getPlan(CUR), goal = monthIncome(CUR).v * pl.pct / 100;
+  const hint = sav > 0 && a.month < sav - 1 ? `Aún podrías pasar ${eur0.format(sav - a.month)} de lo que te sobra.` : a.month ? 'Ya has pasado a ahorro todo lo que te sobra este mes.' : 'Aún no has pasado nada a ahorro este mes.';
+  return `<div class="note-card save" id="savecard"><canvas id="save-art" aria-hidden="true"></canvas>
+      <div class="note-top"><span>Cuenta de ahorro</span><span class="pill-s" style="text-transform:none">Solo entra dinero</span></div>
+      <p class="note-amt">${amtHtml(a.bal)}</p>
+      <p class="note-delta">${inc ? `Has apartado el <b class="down">${Math.round(a.month / inc * 100)}%</b> de lo ingresado este mes. ` : ''}${hint}</p>
+      <div class="note-stats">
+        <div><span>Este mes</span><strong class="down">+${eur0.format(a.month)}</strong></div>
+        <div><span>${cap(monthLong(py, pm))}</span><strong>+${eur0.format(prev)}</strong></div>
+        <div><span>Meta ${pl.pct}%</span><strong class="${goal && a.month >= goal - 1 ? 'down' : ''}">${goal ? Math.round(a.month / goal * 100) + '%' : 'sin datos'}</strong></div>
+      </div>
+    </div>`;
+}
+/* Same engraving as the month card, in green and gold, anchored at the opposite corner. */
+function paintSave(){
+  const cv = $('#save-art'); if (!cv) return;
+  const box = cv.getBoundingClientRect(); if (!box.width) { requestAnimationFrame(paintSave); return; }
+  const dpr = Math.min(2, window.devicePixelRatio || 1), w = box.width, h = box.height, S0 = Math.max(w, h);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.lineWidth = .5;
+  [{R:.28, A:.02, n:36, k:20, c:'rgba(240,200,110,.30)'}, {R:.4, A:.017, n:52, k:16, c:'rgba(160,240,205,.22)'}, {R:.52, A:.013, n:68, k:12, c:'rgba(240,200,110,.15)'}].forEach(g => {
+    for (let j = 0; j < g.k; j++){ const ph = j / g.k * Math.PI * 2; ctx.strokeStyle = g.c; ctx.beginPath();
+      for (let i = 0; i <= 1200; i++){ const t = i / 1200 * Math.PI * 2, rr = S0 * (g.R + g.A * Math.sin(g.n * t + ph)), x = w * .04 + rr * Math.cos(t), y = h * 1.02 + rr * Math.sin(t); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke(); } });
 }
 
 const LOGO = '<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="var(--accent)"/><circle cx="15" cy="15" r="9" fill="none" stroke="var(--note-solid)" stroke-width="2.2"/><circle cx="15" cy="15" r="5.2" fill="none" stroke="var(--note-solid)" stroke-width="1.2" stroke-dasharray="1.6 1.6"/><circle cx="15" cy="15" r="2" fill="var(--note-solid)"/></svg>';
@@ -670,7 +692,7 @@ function paintNote(){
     if (x < 1) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
-window.addEventListener('resize', () => { if ($('#note-art')) paintNote(); });
+window.addEventListener('resize', () => { if ($('#note-art')) paintNote(); paintSave(); });
 
 function itemHtml(e){
   const c = catById(e.cat);
@@ -738,9 +760,12 @@ function renderEvo(){
     const bx = L + i * band + (band - bw) / 2, by = y(mo.t), sel = i === evoSel;
     return `<rect class="b" data-i="${i}" x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(0) - by).toFixed(1)}" rx="4" fill="${sel ? 'var(--accent)' : 'var(--line)'}"/>
       <rect class="b" data-i="${i}" x="${(L + i * band).toFixed(1)}" y="${T}" width="${band.toFixed(1)}" height="${H - T - B}" fill="transparent"/>
-      <line x1="${(L + i * band + 2).toFixed(1)}" x2="${(L + (i + 1) * band - 2).toFixed(1)}" y1="${y(mo.i).toFixed(1)}" y2="${y(mo.i).toFixed(1)}" stroke="var(--down)" stroke-width="3" stroke-linecap="round" pointer-events="none"/>
       <text class="ax" x="${(L + i * band + band / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" ${sel ? 'style="fill:var(--ink);font-weight:600"' : ''}>${monthShort(mo.y, mo.m).slice(0, 3)}</text>`;
   }).join('');
+  // Income as a line with a dot per month, drawn over the spending bars.
+  const cx = i => L + i * band + band / 2;
+  const incLine = `<path d="${months.map((mo, i) => `${i ? 'L' : 'M'}${cx(i).toFixed(1)},${y(mo.i).toFixed(1)}`).join('')}" fill="none" stroke="var(--down)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>`
+    + months.map((mo, i) => `<circle cx="${cx(i).toFixed(1)}" cy="${y(mo.i).toFixed(1)}" r="${i === evoSel ? 4.6 : 3.4}" fill="${i === evoSel ? 'var(--down)' : 'var(--bg)'}" stroke="var(--down)" stroke-width="2" pointer-events="none"/>`).join('');
   const avgLine = `<line x1="${L}" x2="${W - R}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
 
   const s = months[evoSel], p = evoSel > 0 ? months[evoSel - 1] : null;
@@ -761,8 +786,8 @@ function renderEvo(){
 
   $('#v-evolucion').innerHTML = `<header class="vhead"><h1>Evolución</h1></header>
     <div><h2>Últimos 12 meses</h2>
-    <figure><svg class="bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto total por mes en los últimos 12 meses">${g}${avgLine}${bars}</svg>
-    <figcaption style="flex-direction:column;gap:4px"><span class="key"><i style="border-top:8px solid var(--line);width:10px"></i>Gastos <i style="border-top:3px solid var(--down);margin-left:10px"></i>Ingresos <i class="dash" style="margin-left:10px;border-color:var(--ink)"></i>Gasto medio</span>
+    <figure><svg class="bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto total por mes en los últimos 12 meses">${g}${avgLine}${bars}${incLine}</svg>
+    <figcaption style="flex-direction:column;gap:4px"><span class="key"><i style="border-top:8px solid var(--line);width:10px"></i>Gastos <i class="lk" aria-hidden="true"></i>Ingresos <i class="dash" style="margin-left:10px;border-color:var(--ink)"></i>Gasto medio</span>
     <span>Gastas de media ${eur0.format(avg)} al mes y ahorras ${eur0.format(avgSave)}. Toca un mes para ver el detalle.</span></figcaption></figure></div>
     <div class="panel" id="evo-cat"></div>
     ${evoPay(months)}

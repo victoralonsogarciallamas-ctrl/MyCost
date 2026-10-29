@@ -1201,6 +1201,15 @@ function toast(msg, undo){
 init();
 })();
 </script>
-<script>if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>
+<script>
+/* Updates: the service worker fetches the newest page; when a new worker takes over, reload once so the new version shows right away. */
+if ('serviceWorker' in navigator){
+  const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW && !reloaded){ reloaded = true; location.reload(); } });
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js', {updateViaCache: 'none'}).then(r => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') r.update().catch(() => {}); });
+  }).catch(() => {}));
+}
+</script>
 </body>
 </html>

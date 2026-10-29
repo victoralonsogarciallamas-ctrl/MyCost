@@ -1,6 +1,6 @@
 /* MyCost service worker: the app shell is cached so the app opens without connection.
    The ticket and Excel readers (vendor/) and the fonts are cached the first time they are used. */
-const VERSION = 'mycost-1.0.1';
+const VERSION = 'mycost-1.0.2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 
@@ -18,8 +18,8 @@ self.addEventListener('fetch', e => {
   if (url.origin === location.origin && url.pathname.includes('/vendor/')) return cacheFirst();
   if (FONTS.test(req.url)) return cacheFirst();
   if (url.origin === location.origin){
-    // Network first for the page so updates arrive; cache when offline.
-    e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })
+    // Network first for the page so updates arrive; no-cache skips the 10 minute HTTP cache of GitHub Pages.
+    e.respondWith(fetch(req, {cache: 'no-cache'}).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })
       .catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
   }
 });

@@ -399,8 +399,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.7';
+const APP_VERSION = '1.8';
 const CHANGELOG = [
+  {v:'1.8', items:['La tarjeta de la cuenta de ahorro queda más limpia: quitamos la etiqueta "Solo entra dinero".']},
   {v:'1.7', items:['En Evolución, al tocar un mes del gráfico verás sus gastos e ingresos en una etiqueta.']},
   {v:'1.6', items:['En Inicio, la tarjeta de la cuenta de ahorro aparece ahora la primera, antes de lo gastado este mes.']},
   {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'Inicio más limpio: el saldo de tu cuenta de ahorro tiene su propia tarjeta verde, y quitamos el gráfico Ritmo del mes.', 'En Evolución, los ingresos se ven como una línea con puntos sobre las barras de gasto.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
@@ -634,7 +635,7 @@ function savingsPanel(){
   const pl = getPlan(CUR), goal = monthIncome(CUR).v * pl.pct / 100;
   const hint = sav > 0 && a.month < sav - 1 ? `Aún podrías pasar ${eur0.format(sav - a.month)} de lo que te sobra.` : a.month ? 'Ya has pasado a ahorro todo lo que te sobra este mes.' : 'Aún no has pasado nada a ahorro este mes.';
   return `<div class="note-card save" id="savecard"><canvas id="save-art" aria-hidden="true"></canvas>
-      <div class="note-top"><span>Cuenta de ahorro</span><span class="pill-s" style="text-transform:none">Solo entra dinero</span></div>
+      <div class="note-top"><span>Cuenta de ahorro</span></div>
       <p class="note-amt">${amtHtml(a.bal)}</p>
       <p class="note-delta">${inc ? `Has apartado el <b class="down">${Math.round(a.month / inc * 100)}%</b> de lo ingresado este mes. ` : ''}${hint}</p>
       <div class="note-stats">

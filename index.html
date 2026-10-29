@@ -82,8 +82,14 @@ h2{font-family:var(--display);font-size:19px;letter-spacing:-.02em;margin:0 0 10
 .note-card{position:relative;overflow:hidden;isolation:isolate;border-radius:28px;background:var(--note-bg);color:var(--note-ink);padding:20px 20px 18px;box-shadow:var(--note-shadow)}
 .note-card.save{background:var(--save-bg);box-shadow:var(--save-shadow)}
 .note-card.save .note-amt small{color:var(--note-muted)}
-.note-card canvas{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.note-card{overflow:visible}
+.note-card canvas{border-radius:inherit;
+position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .note-top{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--note-muted)}
+.notedd{position:relative}
+.notedd .ddbtn.pill-s{background:transparent;color:var(--note-ink);font-size:13px;font-weight:500;padding:3px 8px 3px 10px;gap:4px;border:1px solid rgba(255,255,255,.22)}
+.notedd .ddmenu{color:var(--ink)}
+.note-card:has(.ddmenu:not(.closed)){z-index:9}
 .note-top .pill-s{border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:3px 10px;color:var(--note-ink);text-transform:capitalize}
 .note-amt{font-family:var(--display);font-size:clamp(44px,14vw,60px);font-weight:750;letter-spacing:-.045em;line-height:1;margin-top:26px;font-variation-settings:"opsz" 96;font-variant-numeric:tabular-nums;white-space:nowrap}
 .note-amt small{font-size:.5em;letter-spacing:-.02em;opacity:.75;margin-left:2px}
@@ -399,8 +405,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 const CHANGELOG = [
+  {v:'1.9', items:['En Inicio, toca el mes de la tarjeta para ver cualquier mes anterior: lo gastado, la cuenta de ahorro, en qué se fue y cómo pagaste.']},
   {v:'1.8', items:['La tarjeta de la cuenta de ahorro queda más limpia: quitamos la etiqueta "Solo entra dinero".']},
   {v:'1.7', items:['En Evolución, al tocar un mes del gráfico verás sus gastos e ingresos en una etiqueta.']},
   {v:'1.6', items:['En Inicio, la tarjeta de la cuenta de ahorro aparece ahora la primera, antes de lo gastado este mes.']},
@@ -505,40 +512,26 @@ function cumulative(y, m, upto){
 }
 
 /* ---------- Inicio ---------- */
+// Inicio shows one month at a time; the current month by default.
+const H = {y: TY, m: TM};
 function renderInicio(){
-  const [py, pm] = shift(TY, TM, -1);
-  const cur = cumulative(TY, TM, TD), prev = cumulative(py, pm, 31);
-  const spent = cur[cur.length - 1] || 0;
-  const prevAtDay = prev[Math.min(TD, prev.length) - 1] || 0;
-  const diff = spent - prevAtDay;
+  const HY = H.y, HM = H.m, isCur = HY === TY && HM === TM, hk = ymKey(HY, HM);
+  const [py, pm] = shift(HY, HM, -1);
+  const spent = total(expOf(inMonth(HY, HM)));
   const prevName = monthLong(py, pm);
-  let deltaTxt;
-  if (Math.abs(diff) < 1) deltaTxt = `Lo mismo que a estas alturas de ${prevName}`;
-  else deltaTxt = `<b class="${diff > 0 ? 'up' : 'down'}">${eur0.format(Math.abs(diff))} ${diff > 0 ? 'más' : 'menos'}</b> que a estas alturas de ${prevName}`;
+  // The current month is compared with the previous one at the same day; a past month with the whole previous month.
+  const cmpPrev = isCur ? (cumulative(py, pm, 31)[Math.min(TD, daysIn(py, pm)) - 1] || 0) : total(expOf(inMonth(py, pm)));
+  const diff = spent - cmpPrev, when = isCur ? `a estas alturas de ${prevName}` : `en ${prevName}`;
+  const deltaTxt = Math.abs(diff) < 1 ? `Lo mismo que ${when}` : `<b class="${diff > 0 ? 'up' : 'down'}">${eur0.format(Math.abs(diff))} ${diff > 0 ? 'más' : 'menos'}</b> que ${when}`;
+  const yms = [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(`${TY}-${pad(TM + 1)}`))].filter(k => k <= `${TY}-${pad(TM + 1)}`).sort().reverse();
+  const opts = yms.map(k => { const y = +k.slice(0, 4), m = +k.slice(5) - 1;
+    return `<button role="option" data-hym="${k}" aria-selected="${y === HY && m === HM}"><span>${cap(monthLong(y, m))} ${y}</span><span class="num">${eur0.format(total(expOf(inMonth(y, m))))}</span></button>`; }).join('');
+  const monthDD = `<div class="dd notedd"><button class="ddbtn pill-s" aria-haspopup="listbox" aria-expanded="false">${monthLong(HY, HM)} ${HY}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div class="ddmenu closed" role="listbox" aria-label="Elegir mes">${opts}</div></div>`;
+  const ofMonth = isCur ? 'este mes' : `en ${monthLong(HY, HM)}`;
 
-  // running total chart
-  const W = 340, H = 150, L = 4, R = 56, T = 12, B = 22, dim = daysIn(TY, TM);
-  const maxY = Math.max(spent, prev[prev.length - 1] || 0, 1) * 1.08;
-  const x = d => L + (d - 1) / (Math.max(dim, prev.length) - 1) * (W - L - R);
-  const y = v => T + (1 - v / maxY) * (H - T - B);
-  const path = arr => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i + 1).toFixed(1)},${y(v).toFixed(1)}`).join('');
-  const area = cur.length ? `${path(cur)}L${x(cur.length).toFixed(1)},${y(0)}L${x(1)},${y(0)}Z` : '';
-  const ex = x(cur.length || 1), ey = y(spent);
-  const pex = x(prev.length), pey = y(prev[prev.length - 1] || 0);
-  const svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto acumulado de ${monthLong(TY, TM)} frente a ${prevName}">
-    <line class="grid" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>
-    <path d="${area}" fill="var(--accent-soft)" opacity=".8"/>
-    <path d="${path(prev)}" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="4 4"/>
-    <path d="${path(cur)}" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>
-    <circle cx="${ex}" cy="${ey}" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="2"/>
-    <text class="ax" x="${pex + 6}" y="${pey + 4}">${eur0.format(prev[prev.length - 1] || 0)}</text>
-    <text class="ax" x="${L}" y="${H - 5}">1</text>
-    <text class="ax" x="${x(15)}" y="${H - 5}" text-anchor="middle">15</text>
-    <text class="ax" x="${x(dim)}" y="${H - 5}" text-anchor="middle">${dim}</text>
-  </svg>`;
-
-  const cats = Object.entries(byCat(expOf(inMonth(TY, TM)))).sort((a, b) => b[1] - a[1]);
-  const income = total(incOf(inMonth(TY, TM))), saved = r2(income - spent);
+  const cats = Object.entries(byCat(expOf(inMonth(HY, HM)))).sort((a, b) => b[1] - a[1]);
+  const income = total(incOf(inMonth(HY, HM))), saved = r2(income - spent);
   const balance = `<div class="panel bal">
     <div><span class="muted small">Ingresos</span><strong class="num down">+${eur.format(income)}</strong></div>
     <div><span class="muted small">Gastos</span><strong class="num">${eur.format(spent)}</strong></div>
@@ -549,7 +542,7 @@ function renderInicio(){
     <div class="catrow"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span><span class="num">${eur.format(v)}</span>
     <div class="track"><div class="fill" style="width:${(v / top * 100).toFixed(1)}%;background:${c.color}"></div></div></div>`; }).join('');
 
-  const recent = [...S.expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  const recent = (isCur ? [...S.expenses] : inMonth(HY, HM)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
 
   const ratio = income ? Math.round(saved / income * 100) : null;
   const welcome = S.expenses.length ? '' : `<div class="panel welcome">
@@ -560,35 +553,35 @@ function renderInicio(){
       <p class="small muted">Tus datos se guardan solo en este móvil. Nadie más los ve. Haz una copia de seguridad de vez en cuando desde Ahorro, en Categorías y copia de seguridad.</p></div>`;
   if (!S.expenses.length){ $('#v-inicio').innerHTML = welcome; return; }
   $('#v-inicio').innerHTML = `
-    ${savingsPanel()}
+    ${savingsPanel(HY, HM)}
     <div class="note-card" id="note"><canvas id="note-art" aria-hidden="true"></canvas>
-      <div class="note-top"><span>Gastado este mes</span><span class="pill-s">${monthLong(TY, TM)} ${TY}</span></div>
+      <div class="note-top"><span>${isCur ? 'Gastado este mes' : `Gastado en ${monthLong(HY, HM)}`}</span>${monthDD}</div>
       <p class="note-amt" id="note-amt" data-v="${spent}">${amtHtml(spent)}</p>
       <p class="note-delta">${deltaTxt}</p>
       <div class="note-stats">
         <div><span>Ingresos</span><strong>${eur0.format(income)}</strong></div>
         <div><span>${saved >= 0 ? 'Ahorro' : 'Te faltan'}</span><strong class="${saved >= 0 ? 'down' : 'up'}">${eur0.format(Math.abs(saved))}</strong></div>
-        <div><span>Meta ${getPlan(CUR).pct}%</span><strong class="${ratio !== null && ratio >= getPlan(CUR).pct ? 'down' : ''}">${ratio === null ? 'sin datos' : ratio + '%'}</strong></div>
+        <div><span>Meta ${getPlan(hk).pct}%</span><strong class="${ratio !== null && ratio >= getPlan(hk).pct ? 'down' : ''}">${ratio === null ? 'sin datos' : ratio + '%'}</strong></div>
       </div>
     </div>
-    <div class="panel"><h2>En qué se va este mes</h2>${catRows || '<p class="muted">Aún no hay gastos este mes. Añade el primero con el botón +.</p>'}</div>
-    ${spent ? payPanel(expOf(inMonth(TY, TM)), expOf(inMonth(py, pm)), prevName) : ''}
-    ${creditPanel()}
-    <div><h2>Últimos movimientos</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
+    <div class="panel"><h2>${isCur ? 'En qué se va este mes' : `En qué se fue en ${monthLong(HY, HM)}`}</h2>${catRows || `<p class="muted">No hay gastos ${ofMonth}.${isCur ? ' Añade el primero con el botón +.' : ''}</p>`}</div>
+    ${spent ? payPanel(expOf(inMonth(HY, HM)), expOf(inMonth(py, pm)), prevName, HY, HM) : ''}
+    ${creditPanel(HY, HM)}
+    <div><h2>${isCur ? 'Últimos movimientos' : `Movimientos de ${monthLong(HY, HM)}`}</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
   paintNote(); paintSave();
 }
 
-function payPanel(list, prevList, prevName){
+function payPanel(list, prevList, prevName, y = TY, m = TM){
   const cur = byPay(list), prev = byPay(prevList), tot = total(list) || 1;
   const bar = PAYS.filter(x => cur[x.id] > 0).map(x => `<i style="width:${(cur[x.id] / tot * 100).toFixed(1)}%;background:${x.color}"></i>`).join('');
   const rows = PAYS.map(x => { const d = cur[x.id] - prev[x.id];
     return `<div class="payrow"><i class="paysw" style="background:${x.color}"></i><span>${x.name}${prev[x.id] || cur[x.id] ? `<span class="small muted" style="display:block">${Math.abs(d) < 1 ? 'igual que' : `${eur0.format(Math.abs(d))} ${d > 0 ? 'más' : 'menos'} que`} en ${prevName}</span>` : ''}</span>
       <span class="num">${eur.format(cur[x.id])}</span><span class="pc">${Math.round(cur[x.id] / tot * 100)}%</span></div>`; }).join('');
-  const pm = pluxee(inMonth(TY, TM)), pa = pluxee(S.expenses);
+  const pm = pluxee(inMonth(y, m)), pa = pluxee(S.expenses.filter(e => e.date < ymKey(...shift(y, m, 1)) + '-01'));
   const plx = pm.inc || pm.out || pa.inc ? `<div class="plx"><div><span class="small muted">Saldo Pluxee</span><strong class="num ${pa.bal < 0 ? 'up' : ''}">${eur.format(pa.bal)}</strong></div>
-    <p class="small muted">Este mes has recibido ${eur.format(pm.inc)} y gastado ${eur.format(pm.out)}${pm.inc ? `, el ${Math.round(Math.min(pm.out / pm.inc, 9.99) * 100)}% de la carga` : ''}.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga de Pluxee.' : ''}</p></div>` : '';
-  return `<div class="panel"><h2>Cómo pagas este mes</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}${plx}</div>`;
+    <p class="small muted">${y === TY && m === TM ? 'Este mes' : `En ${monthLong(y, m)}`} has recibido ${eur.format(pm.inc)} y gastado ${eur.format(pm.out)}${pm.inc ? `, el ${Math.round(Math.min(pm.out / pm.inc, 9.99) * 100)}% de la carga` : ''}.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga de Pluxee.' : ''}</p></div>` : '';
+  return `<div class="panel"><h2>Cómo pagas ${y === TY && m === TM ? 'este mes' : `en ${monthLong(y, m)}`}</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}${plx}</div>`;
 }
 
 /* Credit card cycle: purchases of one month are charged to the account early the next month,
@@ -601,12 +594,12 @@ function creditCycle(y, m){
   const back = total(refunds);
   return {py, pm, bought, charged, back, n: refunds.length, pending: r2(Math.max(0, charged - back)), next: total(expOf(inMonth(y, m)).filter(e => payOf(e) === 'credito'))};
 }
-function creditPanel(){
-  const c = creditCycle(TY, TM);
+function creditPanel(y = TY, m = TM){
+  const c = creditCycle(y, m);
   if (!c.bought && !c.charged && !c.back && !c.next) return '';
   const base = c.charged || c.bought, done = base ? Math.min(1, c.back / base) : 0, rec = c.bought ? c.back / c.bought : 0;
   const diff = c.charged && c.bought ? r2(c.charged - c.bought) : 0;
-  const [ny, nm] = shift(TY, TM, 1);
+  const [ny, nm] = shift(y, m, 1);
   return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Tarjeta de crédito</h2><span class="small muted">Ciclo de ${monthLong(c.py, c.pm)}</span></div>
     <div class="cc">
       <div><span class="small muted">Gastado</span><strong class="num">${eur.format(c.bought)}</strong></div>
@@ -618,28 +611,29 @@ function creditPanel(){
     <p class="small" style="margin:0">${!c.charged ? `Aún no has apuntado el cargo de la tarjeta de este mes. Cuando llegue, añádelo como gasto en <b>Pago tarjeta de crédito</b>.` :
       c.pending ? `Te quedan <b>${eur.format(c.pending)}</b> por recibir. Llevas ${c.n} ${c.n === 1 ? 'reembolso' : 'reembolsos'} (${Math.round(done * 100)}%).` : `Ya te han devuelto todo el cargo${c.n > 1 ? ` en ${c.n} pagos` : ''}.`}
       ${Math.abs(diff) >= 1 ? ` <span class="muted">El cargo es ${eur.format(Math.abs(diff))} ${diff > 0 ? 'mayor' : 'menor'} que lo que apuntaste con crédito: puede que falte algún gasto${diff > 0 ? '' : ' o que el banco cierre el ciclo otro día'}.</span>` : ''}</p>
-    ${c.next ? `<p class="small muted" style="margin:8px 0 0">Este mes llevas ${eur.format(c.next)} con crédito, que se cargarán a principios de ${monthLong(ny, nm)}.</p>` : ''}
+    ${c.next ? `<p class="small muted" style="margin:8px 0 0">${y === TY && m === TM ? 'Este mes llevas' : `En ${monthLong(y, m)} gastaste`} ${eur.format(c.next)} con crédito, que se ${y === TY && m === TM ? 'cargarán' : 'cargaron'} a principios de ${monthLong(ny, nm)}.</p>` : ''}
   </div>`;
 }
 
 /* Savings account: money only goes in. Its balance is the starting balance plus every transfer recorded. */
 function savingsAcc(y, m){
-  const all = S.expenses.filter(e => e.cat === 'aahorro');
+  // Balance at the end of that month, so a past month shows what the account held then.
+  const end = ymKey(...shift(y, m, 1)) + '-01', all = S.expenses.filter(e => e.cat === 'aahorro' && e.date < end);
   const month = total(all.filter(e => e.date.startsWith(`${y}-${pad(m + 1)}-`)));
   return {bal: r2((S.savingsStart || 0) + total(all)), month, n: all.length, any: all.length > 0 || (S.savingsStart || 0) > 0};
 }
-function savingsPanel(){
-  const a = savingsAcc(TY, TM), [py, pm] = shift(TY, TM, -1), prev = savingsAcc(py, pm).month;
+function savingsPanel(y = TY, m = TM){
+  const a = savingsAcc(y, m), [py, pm] = shift(y, m, -1), prev = savingsAcc(py, pm).month, isCur = y === TY && m === TM;
   if (!a.any) return '';
-  const inc = total(incOf(inMonth(TY, TM))), sav = r2(inc - total(expOf(inMonth(TY, TM))));
-  const pl = getPlan(CUR), goal = monthIncome(CUR).v * pl.pct / 100;
-  const hint = sav > 0 && a.month < sav - 1 ? `Aún podrías pasar ${eur0.format(sav - a.month)} de lo que te sobra.` : a.month ? 'Ya has pasado a ahorro todo lo que te sobra este mes.' : 'Aún no has pasado nada a ahorro este mes.';
+  const inc = total(incOf(inMonth(y, m))), sav = r2(inc - total(expOf(inMonth(y, m))));
+  const pl = getPlan(ymKey(y, m)), goal = monthIncome(ymKey(y, m)).v * pl.pct / 100;
+  const hint = !isCur ? (sav > 0 && a.month < sav - 1 ? `Te sobraron ${eur0.format(sav - a.month)} que no pasaste a ahorro.` : '') : sav > 0 && a.month < sav - 1 ? `Aún podrías pasar ${eur0.format(sav - a.month)} de lo que te sobra.` : a.month ? `Pasaste a ahorro todo lo que te sobró ${isCur ? 'este mes' : `en ${monthLong(y, m)}`}.` : 'Aún no has pasado nada a ahorro este mes.';
   return `<div class="note-card save" id="savecard"><canvas id="save-art" aria-hidden="true"></canvas>
-      <div class="note-top"><span>Cuenta de ahorro</span></div>
+      <div class="note-top"><span>${isCur ? 'Cuenta de ahorro' : `Cuenta de ahorro a final de ${monthLong(y, m)}`}</span></div>
       <p class="note-amt">${amtHtml(a.bal)}</p>
-      <p class="note-delta">${inc ? `Has apartado el <b class="down">${Math.round(a.month / inc * 100)}%</b> de lo ingresado este mes. ` : ''}${hint}</p>
+      <p class="note-delta">${inc ? `Has apartado el <b class="down">${Math.round(a.month / inc * 100)}%</b> de lo ingresado ${isCur ? 'este mes' : `en ${monthLong(y, m)}`}. ` : ''}${hint}</p>
       <div class="note-stats">
-        <div><span>Este mes</span><strong class="down">+${eur0.format(a.month)}</strong></div>
+        <div><span>${isCur ? 'Este mes' : cap(monthLong(y, m))}</span><strong class="down">+${eur0.format(a.month)}</strong></div>
         <div><span>${cap(monthLong(py, pm))}</span><strong>+${eur0.format(prev)}</strong></div>
         <div><span>Meta ${pl.pct}%</span><strong class="${goal && a.month >= goal - 1 ? 'down' : ''}">${goal ? Math.round(a.month / goal * 100) + '%' : 'sin datos'}</strong></div>
       </div>
@@ -1354,6 +1348,7 @@ document.querySelector('main').addEventListener('click', e => {
   const g = e.target.closest('[data-go]'); if (g){ try { history.replaceState(null, '', '#' + g.dataset.go); } catch (err) {} go(g.dataset.go); return; }
   const it = e.target.closest('.item'); if (it){ const x = S.expenses.find(z => z.id === it.dataset.id); if (x) openSheet(x); return; }
   const db = e.target.closest('.ddbtn'); if (db){ toggleDD(db.parentElement); return; }
+  const ho = e.target.closest('[data-hym]'); if (ho){ H.y = +ho.dataset.hym.slice(0, 4); H.m = +ho.dataset.hym.slice(5) - 1; noteDrawn = false; renderInicio(); return; }
   const po = e.target.closest('[data-pym]'); if (po){ planYM = po.dataset.pym; renderPlan(); slideIn('#v-ahorro .panel'); return; }
   const co = e.target.closest('[data-ecat]'); if (co){ evoCat = co.dataset.ecat; renderEvoCat(); slideIn('#evo-cat figure'); return; }
   const cb = e.target.closest('rect.cb'); if (cb){ evoCatSel = +cb.dataset.i; renderEvoCat(); return; }

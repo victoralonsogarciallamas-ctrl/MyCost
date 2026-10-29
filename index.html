@@ -305,6 +305,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .plx>div{display:flex;justify-content:space-between;align-items:baseline}
 .plx strong{font-family:var(--display);font-size:22px}
 .plx p{margin:0}
+.cc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--down) 10%,var(--surface))}
+.cc>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cc strong{font-size:16px}
 .paysw{width:10px;height:10px;border-radius:3px;display:inline-block}
 .seg.pay{grid-template-columns:repeat(4,1fr);margin-top:-6px}
 .seg.pay .chip{border:0;background:none;padding:8px 2px;font-size:13.5px;border-radius:9px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
@@ -390,7 +393,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.5';
 const CHANGELOG = [
-  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
+  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
@@ -431,8 +434,11 @@ const DEFAULT_CATS = [
   {id:'salud', name:'Salud y deporte', color:'#2BA38F'},
   {id:'subs', name:'Suscripciones', color:'#6B7A8F'},
   {id:'otros', name:'Otros', color:'#A0886B'},
+  // The monthly charge of the credit card on the account. Each purchase already counted when it was made, so this does not add to spending.
+  {id:'pagotarjeta', name:'Pago tarjeta de crédito', color:'#9A86B8', xfer:true},
   {id:'nomina', name:'Nómina', color:'#1F9D6E', inc:true},
-  {id:'ingotros', name:'Otros ingresos', color:'#6FAF4E', inc:true}
+  {id:'ingotros', name:'Otros ingresos', color:'#6FAF4E', inc:true},
+  {id:'reembolso', name:'Reembolso crédito', color:'#C46FA6', inc:true}
 ];
 const PAYS = [
   {id:'debito', name:'Débito', color:'#3F6FE0'},
@@ -463,12 +469,15 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e)
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 load();
 S.plans = S.plans || {};
+// Categories added in later versions reach people who already have data.
+DEFAULT_CATS.forEach((c, i) => { if (!S.cats.some(x => x.id === c.id)){ const at = S.cats.findIndex(x => x.id === (DEFAULT_CATS[i - 1] || {}).id); S.cats.splice(at + 1, 0, {...c}); } });
 if (S.goal && !S.plans[`${TY}-${pad(TM + 1)}`]) S.plans[`${TY}-${pad(TM + 1)}`] = {pct: S.goal.pct, income: null};
 delete S.goal;
 
 const catById = id => S.cats.find(c => c.id === id) || S.cats.find(c => c.id === 'otros') || S.cats[0];
 const isInc = e => !!catById(e.cat).inc;
-const expOf = list => list.filter(e => !isInc(e));
+const isXfer = e => !!catById(e.cat).xfer;
+const expOf = list => list.filter(e => !isInc(e) && !isXfer(e));
 const incOf = list => list.filter(isInc);
 const inMonth = (y, m) => { const p = `${y}-${pad(m + 1)}-`; return S.expenses.filter(e => e.date.startsWith(p)); };
 const total = list => r2(list.reduce((s, e) => s + e.amount, 0));
@@ -552,6 +561,7 @@ function renderInicio(){
       <figure>${svg}<figcaption><span class="key"><i></i>${cap(monthLong(TY, TM))}</span><span class="key"><i class="dash"></i>${cap(prevName)}</span></figcaption></figure></div>
     <div class="panel"><h2>En qué se va este mes</h2>${catRows || '<p class="muted">Aún no hay gastos este mes. Añade el primero con el botón +.</p>'}</div>
     ${spent ? payPanel(expOf(inMonth(TY, TM)), expOf(inMonth(py, pm)), prevName) : ''}
+    ${creditPanel()}
     <div><h2>Últimos movimientos</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
   paintNote();
@@ -567,6 +577,37 @@ function payPanel(list, prevList, prevName){
   const plx = pm.inc || pm.out || pa.inc ? `<div class="plx"><div><span class="small muted">Saldo Pluxee</span><strong class="num ${pa.bal < 0 ? 'up' : ''}">${eur.format(pa.bal)}</strong></div>
     <p class="small muted">Este mes has recibido ${eur.format(pm.inc)} y gastado ${eur.format(pm.out)}${pm.inc ? `, el ${Math.round(Math.min(pm.out / pm.inc, 9.99) * 100)}% de la carga` : ''}.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga de Pluxee.' : ''}</p></div>` : '';
   return `<div class="panel"><h2>Cómo pagas este mes</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}${plx}</div>`;
+}
+
+/* Credit card cycle: purchases of one month are charged to the account early the next month,
+   then reimbursed in parts during that month. The panel follows the cycle charged this month. */
+function creditCycle(y, m){
+  const [py, pm] = shift(y, m, -1);
+  const bought = total(expOf(inMonth(py, pm)).filter(e => payOf(e) === 'credito'));
+  const charged = total(inMonth(y, m).filter(e => e.cat === 'pagotarjeta'));
+  const refunds = inMonth(y, m).filter(e => e.cat === 'reembolso');
+  const back = total(refunds);
+  return {py, pm, bought, charged, back, n: refunds.length, pending: r2(Math.max(0, charged - back)), next: total(expOf(inMonth(y, m)).filter(e => payOf(e) === 'credito'))};
+}
+function creditPanel(){
+  const c = creditCycle(TY, TM);
+  if (!c.bought && !c.charged && !c.back && !c.next) return '';
+  const base = c.charged || c.bought, done = base ? Math.min(1, c.back / base) : 0, rec = c.bought ? c.back / c.bought : 0;
+  const diff = c.charged && c.bought ? r2(c.charged - c.bought) : 0;
+  const [ny, nm] = shift(TY, TM, 1);
+  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Tarjeta de crédito</h2><span class="small muted">Ciclo de ${monthLong(c.py, c.pm)}</span></div>
+    <div class="cc">
+      <div><span class="small muted">Gastado</span><strong class="num">${eur.format(c.bought)}</strong></div>
+      <div><span class="small muted">Recuperado</span><strong class="num down">${eur.format(c.back)}</strong></div>
+      <div><span class="small muted">Recuperación</span><strong class="num ${rec >= .995 ? 'down' : ''}">${c.bought ? Math.round(rec * 100) + '%' : '-'}</strong></div>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">Cargado en cuenta: ${c.charged ? eur.format(c.charged) : 'aún sin apuntar'}.</p>
+    <div class="track" style="height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin:12px 0 8px"><div style="height:100%;width:${(done * 100).toFixed(1)}%;background:var(--down);border-radius:4px"></div></div>
+    <p class="small" style="margin:0">${!c.charged ? `Aún no has apuntado el cargo de la tarjeta de este mes. Cuando llegue, añádelo como gasto en <b>Pago tarjeta de crédito</b>.` :
+      c.pending ? `Te quedan <b>${eur.format(c.pending)}</b> por recibir. Llevas ${c.n} ${c.n === 1 ? 'reembolso' : 'reembolsos'} (${Math.round(done * 100)}%).` : `Ya te han devuelto todo el cargo${c.n > 1 ? ` en ${c.n} pagos` : ''}.`}
+      ${Math.abs(diff) >= 1 ? ` <span class="muted">El cargo es ${eur.format(Math.abs(diff))} ${diff > 0 ? 'mayor' : 'menor'} que lo que apuntaste con crédito: puede que falte algún gasto${diff > 0 ? '' : ' o que el banco cierre el ciclo otro día'}.</span>` : ''}</p>
+    ${c.next ? `<p class="small muted" style="margin:8px 0 0">Este mes llevas ${eur.format(c.next)} con crédito, que se cargarán a principios de ${monthLong(ny, nm)}.</p>` : ''}
+  </div>`;
 }
 
 const LOGO = '<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="var(--accent)"/><circle cx="15" cy="15" r="9" fill="none" stroke="var(--note-solid)" stroke-width="2.2"/><circle cx="15" cy="15" r="5.2" fill="none" stroke="var(--note-solid)" stroke-width="1.2" stroke-dasharray="1.6 1.6"/><circle cx="15" cy="15" r="2" fill="var(--note-solid)"/></svg>';
@@ -612,7 +653,7 @@ function itemHtml(e){
   const c = catById(e.cat);
   const src = e.source === 'ticket' ? '<span class="badge">ticket</span>' : e.source === 'extracto' ? '<span class="badge">extracto</span>' : '';
   return `<button class="item" data-id="${e.id}"><i class="dot" style="background:${c.color}"></i>
-    <span class="txt"><span class="t1">${esc(e.concept)}${src}</span><span class="t2" style="display:block">${esc(c.name)}${c.inc && payOf(e) === 'cuenta' ? '' : ` · <span style="color:${payById(payOf(e)).color}">${payById(payOf(e)).name}</span>`}</span></span>
+    <span class="txt"><span class="t1">${esc(e.concept)}${src}${c.xfer ? '<span class="badge">no suma</span>' : ''}</span><span class="t2" style="display:block">${esc(c.name)}${c.inc && payOf(e) === 'cuenta' ? '' : ` · <span style="color:${payById(payOf(e)).color}">${payById(payOf(e)).name}</span>`}</span></span>
     <span class="amt num ${c.inc ? 'down' : ''}">${c.inc ? '+' : ''}${eur.format(e.amount)}</span></button>`;
 }
 
@@ -702,6 +743,7 @@ function renderEvo(){
     <span>Gastas de media ${eur0.format(avg)} al mes y ahorras ${eur0.format(avgSave)}. Toca un mes para ver el detalle.</span></figcaption></figure></div>
     <div class="panel" id="evo-cat"></div>
     ${evoPay(months)}
+    ${evoCredit()}
     <div class="panel">
       <h2 style="text-transform:capitalize">${monthLong(s.y, s.m)} ${s.y}</h2>
       <div class="bal" style="padding:0 0 10px">
@@ -750,7 +792,7 @@ function monthIncome(k){
 }
 function makePlan(income, pct, y, m){
   const {avg} = history6(y, m);
-  const cats = S.cats.filter(c => !c.inc).map(c => ({c, avg: avg[c.id] || 0, fixed: FIXED.has(c.id), w: CUT_W[c.id] !== undefined ? CUT_W[c.id] : .8}));
+  const cats = S.cats.filter(c => !c.inc && !c.xfer).map(c => ({c, avg: avg[c.id] || 0, fixed: FIXED.has(c.id), w: CUT_W[c.id] !== undefined ? CUT_W[c.id] : .8}));
   cats.forEach(x => { x.rec = x.avg; });
   const totalAvg = cats.reduce((s, x) => s + x.avg, 0);
   const budget = income * (1 - pct / 100), need = totalAvg - budget;
@@ -854,6 +896,20 @@ function evoPay(months){
     <figure><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto por método de pago en los últimos 12 meses">${g}${bars}</svg>
     <figcaption style="flex-direction:column;gap:4px"><span class="key">${PAYS.map(x => `<i class="paysw" style="background:${x.color};margin-left:${x.id === 'debito' ? 0 : 10}px"></i>${x.name}`).join(' ')}</span>
     <span>En el último año: ${avgTxt}. Con Pluxee pagas de media ${eur0.format(plx)} al mes${plxIn ? ` y recibes ${eur0.format(plxIn)}` : ''}.</span></figcaption></figure></div>`;
+}
+
+function evoCredit(){
+  let bought = 0, back = 0, charged = 0;
+  for (let k = 11; k >= 0; k--){ const [y, m] = shift(TY, TM, -k), c = creditCycle(y, m); bought += c.bought; back += c.back; charged += c.charged; }
+  if (!bought && !back) return '';
+  const rec = bought ? back / bought : 0;
+  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Tarjeta de crédito</h2><span class="small muted">Últimos 12 meses</span></div>
+    <div class="cc">
+      <div><span class="small muted">Gastado</span><strong class="num">${eur0.format(bought)}</strong></div>
+      <div><span class="small muted">Recuperado</span><strong class="num down">${eur0.format(back)}</strong></div>
+      <div><span class="small muted">Recuperación</span><strong class="num">${Math.round(rec * 100)}%</strong></div>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">${bought - back >= 1 ? `Te faltan por recuperar ${eur0.format(bought - back)} de lo gastado con crédito.` : 'Has recuperado todo lo gastado con crédito.'} Cargado en cuenta: ${eur0.format(charged)}.</p></div>`;
 }
 
 /* ---------- Evolución por categoría ---------- */
@@ -1131,7 +1187,7 @@ const RULES = [
   [/farmacia|clinica|clínica|dentist|gimnasio|\bgym\b|fisio/i, 'salud'],
   [/cine|yelmo|cinesa|ticketmaster|entradas|fnac|casa del libro|museo|teatro/i, 'ocio']
 ];
-const guessCat = (t, income) => { if (income) return /n[oó]mina|salario/i.test(t) && S.cats.some(x => x.id === 'nomina') ? 'nomina' : (S.cats.find(x => x.inc) || {}).id || 'otros'; for (const [re, c] of RULES) if (re.test(t) && S.cats.some(x => x.id === c)) return c; return 'otros'; };
+const guessCat = (t, income) => { if (income && /reembols|devoluci[oó]n tarjeta|abono tarjeta/i.test(t) && S.cats.some(x => x.id === 'reembolso')) return 'reembolso'; if (!income && /liquidaci[oó]n tarjeta|pago tarjeta|recibo tarjeta|cargo tarjeta|tarjeta cr[eé]dito/i.test(t) && S.cats.some(x => x.id === 'pagotarjeta')) return 'pagotarjeta'; if (income) return /n[oó]mina|salario/i.test(t) && S.cats.some(x => x.id === 'nomina') ? 'nomina' : (S.cats.find(x => x.inc) || {}).id || 'otros'; for (const [re, c] of RULES) if (re.test(t) && S.cats.some(x => x.id === c)) return c; return 'otros'; };
 function splitRow(line, d){
   const out = []; let cur = '', q = false;
   for (const ch of line){ if (ch === '"') q = !q; else if (ch === d && !q) { out.push(cur.trim()); cur = ''; } else cur += ch; }

@@ -1,6 +1,6 @@
 /* MyCost service worker: the app shell is cached so the app opens without connection.
    The ticket and Excel readers (vendor/) and the fonts are cached the first time they are used. */
-const VERSION = 'mycost-1.4.0';
+const VERSION = 'mycost-1.5.0';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 

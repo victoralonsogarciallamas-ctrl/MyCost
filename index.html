@@ -405,8 +405,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 const CHANGELOG = [
+  {v:'1.10', items:['Los filtros de mes de Inicio y Movimientos muestran todos los meses del año, aunque no tengan movimientos.']},
   {v:'1.9', items:['En Inicio, toca el mes de la tarjeta para ver cualquier mes anterior: lo gastado, la cuenta de ahorro, en qué se fue y cómo pagaste.']},
   {v:'1.8', items:['La tarjeta de la cuenta de ahorro queda más limpia: quitamos la etiqueta "Solo entra dinero".']},
   {v:'1.7', items:['En Evolución, al tocar un mes del gráfico verás sus gastos e ingresos en una etiqueta.']},
@@ -514,6 +515,8 @@ function cumulative(y, m, upto){
 /* ---------- Inicio ---------- */
 // Inicio shows one month at a time; the current month by default.
 const H = {y: TY, m: TM};
+// Month filters list every month of this year, empty or not, plus earlier months that have movements. Newest first.
+const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`)))].sort().reverse();
 function renderInicio(){
   const HY = H.y, HM = H.m, isCur = HY === TY && HM === TM, hk = ymKey(HY, HM);
   const [py, pm] = shift(HY, HM, -1);
@@ -523,7 +526,7 @@ function renderInicio(){
   const cmpPrev = isCur ? (cumulative(py, pm, 31)[Math.min(TD, daysIn(py, pm)) - 1] || 0) : total(expOf(inMonth(py, pm)));
   const diff = spent - cmpPrev, when = isCur ? `a estas alturas de ${prevName}` : `en ${prevName}`;
   const deltaTxt = Math.abs(diff) < 1 ? `Lo mismo que ${when}` : `<b class="${diff > 0 ? 'up' : 'down'}">${eur0.format(Math.abs(diff))} ${diff > 0 ? 'más' : 'menos'}</b> que ${when}`;
-  const yms = [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(`${TY}-${pad(TM + 1)}`))].filter(k => k <= `${TY}-${pad(TM + 1)}`).sort().reverse();
+  const yms = monthList();
   const opts = yms.map(k => { const y = +k.slice(0, 4), m = +k.slice(5) - 1;
     return `<button role="option" data-hym="${k}" aria-selected="${y === HY && m === HM}"><span>${cap(monthLong(y, m))} ${y}</span><span class="num">${eur0.format(total(expOf(inMonth(y, m))))}</span></button>`; }).join('');
   const monthDD = `<div class="dd notedd"><button class="ddbtn pill-s" aria-haspopup="listbox" aria-expanded="false">${monthLong(HY, HM)} ${HY}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -722,7 +725,7 @@ function renderMovs(keepSearch){
     <div class="sum"><span class="muted">${list.length} ${list.length === 1 ? 'movimiento' : 'movimientos'}</span><span class="num">${M.t !== 'gastos' ? `<strong class="down">+${eur.format(total(incOf(list)))}</strong>` : ''}${M.t === 'todos' ? '&nbsp;&nbsp;' : ''}${M.t !== 'ingresos' ? `<strong>${eur.format(total(expOf(list)))}</strong>` : ''}</span></div>
     <div id="movlist">${html || `<p class="muted" style="padding:20px 0">No hay movimientos${M.cat || M.q || M.pay || M.t !== 'todos' ? ' con estos filtros' : ''} en ${monthLong(M.y, M.m)}.</p>`}</div>`;
   if (keepSearch && $('#movbody')) { $('#movbody').innerHTML = body; return; }
-  const yms = [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(`${TY}-${pad(TM + 1)}`))].sort().reverse();
+  const yms = monthList();
   const opts = yms.map(k => { const y = +k.slice(0, 4), m = +k.slice(5) - 1, sel = y === M.y && m === M.m;
     return `<button role="option" data-ym="${k}" aria-selected="${sel}"><span>${cap(monthLong(y, m))} ${y}</span><span class="num">${eur0.format(total(expOf(inMonth(y, m))))}</span></button>`; }).join('');
   $('#v-movimientos').innerHTML = `<header class="vhead"><h1>Movimientos</h1>

@@ -411,8 +411,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.16';
+const APP_VERSION = '1.17';
 const CHANGELOG = [
+  {v:'1.17', items:['El mes que eliges en Inicio, Movimientos o Ahorro se aplica en las tres pestañas a la vez.']},
   {v:'1.16', items:['Ahora puedes importar el extracto del banco en PDF, además de Excel o CSV. Se lee en tu móvil: el archivo no sale de aquí.', 'También lee los justificantes de un solo movimiento, como el Adeudo en cuenta de Cajamar. Puedes elegir varios PDF a la vez.']},
   {v:'1.15', items:['Al cambiar de pestaña, la pantalla se abre siempre desde arriba.']},
   {v:'1.14', items:['La tarjeta de lo gastado se abre con el filtro Débito. Pulsa Todo para ver el total.', 'Las cifras de abajo de la tarjeta cambian con el filtro. Con Débito ves lo que te queda en la cuenta, cargo de la tarjeta incluido, y tu meta de ahorro, que solo se mide ahí. Con Crédito ves lo reembolsado y lo pendiente, y con Pluxee lo recibido y el saldo disponible.']},
@@ -535,7 +536,12 @@ const H = {y: TY, m: TM, pay: 'debito'};
 // The month card can show only what was paid with one method; debit by default.
 const byPayOf = (list, pay) => pay === 'todos' ? list : list.filter(e => payOf(e) === pay);
 // Month filters list every month of this year, empty or not, plus earlier months that have movements. Newest first.
-const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`)))].sort().reverse();
+const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`), ymKey(H.y, H.m)))].sort().reverse();
+// Inicio, Movimientos and Ahorro share one month: picking it in any of them moves the other two.
+function setMonth(y, m){
+  H.y = y; H.m = m; M.y = y; M.m = m; M.cat = null; planYM = ymKey(y, m); noteDrawn = false;
+  renderInicio(); renderMovs(); renderPlan();
+}
 function renderInicio(){
   const HY = H.y, HM = H.m, isCur = HY === TY && HM === TM, hk = ymKey(HY, HM);
   const [py, pm] = shift(HY, HM, -1);
@@ -915,7 +921,7 @@ function makePlan(income, pct, y, m){
   return {cats: cats.filter(x => x.avg > 0).sort((a, b) => b.avg - a.avg), totalAvg, budget, need, maxPct, curPct, feasible: need <= maxCut + .5};
 }
 let planYM = CUR;
-function planMonths(){ const out = [ymKey(...shift(TY, TM, 1))]; for (let k = 0; k < 12; k++) out.push(ymKey(...shift(TY, TM, -k))); return out; }
+function planMonths(){ const out = [ymKey(...shift(TY, TM, 1))]; for (let k = 0; k < 12; k++) out.push(ymKey(...shift(TY, TM, -k))); if (!out.includes(planYM)) out.push(planYM); return out.sort().reverse(); }
 const ymLabel = k => { const [y, m] = ymSplit(k); return `${cap(monthLong(y, m))} ${y}`; };
 function renderPlan(){
   const k = planYM, [y, m] = ymSplit(k), pl = getPlan(k), inc = monthIncome(k), h = history6(y, m);
@@ -1486,13 +1492,13 @@ document.querySelector('main').addEventListener('click', e => {
   const it = e.target.closest('.item'); if (it){ const x = S.expenses.find(z => z.id === it.dataset.id); if (x) openSheet(x); return; }
   const db = e.target.closest('.ddbtn'); if (db){ toggleDD(db.parentElement); return; }
   const hp = e.target.closest('[data-hpay]'); if (hp){ H.pay = hp.dataset.hpay; noteDrawn = false; renderInicio(); return; }
-  const ho = e.target.closest('[data-hym]'); if (ho){ H.y = +ho.dataset.hym.slice(0, 4); H.m = +ho.dataset.hym.slice(5) - 1; noteDrawn = false; renderInicio(); return; }
-  const po = e.target.closest('[data-pym]'); if (po){ planYM = po.dataset.pym; renderPlan(); slideIn('#v-ahorro .panel'); return; }
+  const ho = e.target.closest('[data-hym]'); if (ho){ setMonth(...ymSplit(ho.dataset.hym)); return; }
+  const po = e.target.closest('[data-pym]'); if (po){ setMonth(...ymSplit(po.dataset.pym)); slideIn('#v-ahorro .panel'); return; }
   const co = e.target.closest('[data-ecat]'); if (co){ evoCat = co.dataset.ecat; renderEvoCat(); slideIn('#evo-cat figure'); return; }
   const cb = e.target.closest('rect.cb'); if (cb){ evoCatSel = +cb.dataset.i; renderEvoCat(); return; }
   if (e.target.closest('#g-reset')){ ensurePlan(planYM).income = null; save(); renderPlan(); return; }
   const opt = e.target.closest('#mmenu [data-ym]');
-  if (opt){ M.y = +opt.dataset.ym.slice(0, 4); M.m = +opt.dataset.ym.slice(5) - 1; M.cat = null; renderMovs(); slideIn('#movbody'); return; }
+  if (opt){ setMonth(...ymSplit(opt.dataset.ym)); slideIn('#movbody'); return; }
   const mt = e.target.closest('#mtype button'); if (mt){ M.t = mt.dataset.t; M.cat = null; M.pay = null; renderMovs(); return; }
   const nk = e.target.closest('#newcat-kind button'); if (nk){ newKind = nk.dataset.k; const v = $('#newcat-name').value; renderCats(); $('#newcat-name').value = v; return; }
   const ch = e.target.closest('#movchips .chip');

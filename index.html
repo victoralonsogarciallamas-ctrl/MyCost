@@ -318,6 +318,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .plx strong{font-family:var(--display);font-size:22px}
 .plx p{margin:0}
 .cc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--down) 10%,var(--surface))}
+.cc.px{grid-template-columns:repeat(2,1fr);row-gap:12px;background:color-mix(in srgb,#13A39A 10%,var(--surface))}
 .cc.sv{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
 .cc>div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cc strong{font-size:16px}
@@ -406,8 +407,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.11';
+const APP_VERSION = '1.12';
 const CHANGELOG = [
+  {v:'1.12', items:['La tarjeta de Pluxee muestra lo que te sobró el mes anterior, que se suma a lo que recibes este mes.']},
   {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
   {v:'1.10', items:['Los filtros de mes de Inicio y Movimientos muestran todos los meses del año, aunque no tengan movimientos.']},
   {v:'1.9', items:['En Inicio, toca el mes de la tarjeta para ver cualquier mes anterior: lo gastado, la cuenta de ahorro, en qué se fue y cómo pagaste.']},
@@ -590,17 +592,19 @@ function payPanel(list, prevList, prevName, y = TY, m = TM){
   return `<div class="panel"><h2>Cómo pagas ${y === TY && m === TM ? 'este mes' : `en ${monthLong(y, m)}`}</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}</div>`;
 }
 
-/* Pluxee is a separate wallet: what was loaded and spent this month, and what is left to use. */
+/* Pluxee is a separate wallet whose balance rolls over: what was left last month, plus this month's loads, minus this month's spending. */
 function pluxeePanel(y = TY, m = TM){
   const pm = pluxee(inMonth(y, m)), pa = pluxee(S.expenses.filter(e => e.date < ymKey(...shift(y, m, 1)) + '-01')), isCur = y === TY && m === TM;
   if (!pm.inc && !pm.out && !pa.inc && !pa.out) return '';
+  const [py, pmo] = shift(y, m, -1), carry = r2(pa.bal - pm.inc + pm.out);
   return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Pluxee</h2><span class="small muted">${cap(monthLong(y, m))}</span></div>
-    <div class="cc">
+    <div class="cc px">
+      <div><span class="small muted">Sobra de ${monthLong(py, pmo)}</span><strong class="num">${eur.format(carry)}</strong></div>
       <div><span class="small muted">Recibido</span><strong class="num down">+${eur.format(pm.inc)}</strong></div>
-      <div><span class="small muted">Gastado</span><strong class="num">${eur.format(pm.out)}</strong></div>
+      <div><span class="small muted">Gastado</span><strong class="num">−${eur.format(pm.out)}</strong></div>
       <div><span class="small muted">Disponible</span><strong class="num ${pa.bal < 0 ? 'up' : 'plxc'}">${eur.format(pa.bal)}</strong></div>
     </div>
-    <p class="small muted" style="margin:8px 0 0">${isCur ? 'Saldo que te queda hoy en la tarjeta.' : `Saldo que te quedaba a final de ${monthLong(y, m)}.`} Pluxee va aparte: no cuenta en tus ingresos ni en tu ahorro.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga.' : ''}</p></div>`;
+    <p class="small muted" style="margin:8px 0 0">${isCur ? 'Saldo que te queda hoy en la tarjeta.' : `Saldo que te quedaba a final de ${monthLong(y, m)}.`} Lo que no gastes pasa al mes siguiente. Pluxee va aparte: no cuenta en tus ingresos ni en tu ahorro.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga.' : ''}</p></div>`;
 }
 
 /* Credit card cycle: purchases of one month are charged to the account early the next month,

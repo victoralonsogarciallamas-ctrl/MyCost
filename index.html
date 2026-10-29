@@ -300,6 +300,11 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .paybar i{display:block;height:100%}
 .payrow{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:baseline;padding-block:6px}
 .payrow .pc{color:var(--muted);font-size:13px;min-width:38px;text-align:right}
+[hidden]{display:none!important}
+.plx{margin-top:10px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#13A39A 12%,var(--surface));display:flex;flex-direction:column;gap:4px}
+.plx>div{display:flex;justify-content:space-between;align-items:baseline}
+.plx strong{font-family:var(--display);font-size:22px}
+.plx p{margin:0}
 .paysw{width:10px;height:10px;border-radius:3px;display:inline-block}
 .seg.pay{grid-template-columns:repeat(4,1fr);margin-top:-6px}
 .seg.pay .chip{border:0;background:none;padding:8px 2px;font-size:13.5px;border-radius:9px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
@@ -346,6 +351,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
       <label class="field"><span>Concepto</span><input class="inp" id="f-concept" placeholder="Por ejemplo, Mercadona" autocomplete="off" enterkeyhint="done"></label>
       <div class="field"><span>Categoría</span><div class="wrapchips" id="f-cats"></div></div>
       <div class="field" id="f-payf"><span>Pagado con</span><div class="seg" id="f-pay" role="group" aria-label="Método de pago"><button type="button" data-p="debito" aria-pressed="true">Débito</button><button type="button" data-p="credito" aria-pressed="false">Crédito</button><button type="button" data-p="pluxee" aria-pressed="false">Pluxee</button></div></div>
+      <div class="field" id="f-inf" hidden><span>Recibido en</span><div class="seg seg2" id="f-in" role="group" aria-label="Dónde recibes el ingreso"><button type="button" data-p="cuenta" aria-pressed="true">Cuenta</button><button type="button" data-p="pluxee" aria-pressed="false">Pluxee</button></div></div>
       <label class="field"><span>Fecha</span><input class="inp" type="date" id="f-date"></label>
       <button class="primary" type="submit" id="f-save">Guardar gasto</button>
       <button class="secondary danger" type="button" id="f-delete" hidden>Eliminar gasto</button>
@@ -368,7 +374,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
       <p class="muted small" id="csv-status" aria-live="polite"></p>
       <p class="err" id="csv-err" hidden></p>
       <div id="csv-list"></div>
-      <label class="impsrc" id="csv-src" hidden><span>Los gastos de este extracto se pagaron con</span><select id="csv-pay"><option value="debito">Débito</option><option value="credito">Crédito</option><option value="pluxee">Pluxee</option></select></label>
+      <label class="impsrc" id="csv-src" hidden><span>Este extracto es de</span><select id="csv-pay"><option value="debito">Débito (cuenta)</option><option value="credito">Tarjeta de crédito</option><option value="pluxee">Pluxee</option></select></label>
       <button class="primary" id="csv-import" type="button" hidden>Importar gastos</button>
       <p class="note">Descarga el extracto desde la web o la app de tu banco en Excel o CSV. Necesita columnas de fecha, concepto e importe.</p>
     </div>
@@ -384,7 +390,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.5';
 const CHANGELOG = [
-  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.']},
+  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
@@ -429,11 +435,18 @@ const PAYS = [
   {id:'credito', name:'Crédito', color:'#B0528F'},
   {id:'pluxee', name:'Pluxee', color:'#13A39A'}
 ];
-const payById = id => PAYS.find(x => x.id === id) || PAYS[0];
-const payOf = e => (e.pay && PAYS.some(x => x.id === e.pay)) ? e.pay : 'debito';
+// Income arrives either in the bank account or on the Pluxee card (the part of the salary paid as meal credit).
+const INS = [
+  {id:'cuenta', name:'Cuenta', color:'#7A8199'},
+  {id:'pluxee', name:'Pluxee', color:'#13A39A'}
+];
+const payById = id => PAYS.find(x => x.id === id) || INS.find(x => x.id === id) || PAYS[0];
+const payOf = e => isInc(e) ? (e.pay === 'pluxee' ? 'pluxee' : 'cuenta') : (e.pay && PAYS.some(x => x.id === e.pay)) ? e.pay : 'debito';
 const byPay = list => { const o = {}; PAYS.forEach(x => { o[x.id] = 0; }); list.forEach(e => { o[payOf(e)] += e.amount; }); return o; };
 // The method used last time for that category, so Pluxee comes up by itself at the supermarket.
-const lastPayFor = cat => { const l = S.expenses.filter(e => e.cat === cat && e.pay).sort((a, b) => b.date.localeCompare(a.date))[0]; return l ? l.pay : 'debito'; };
+const lastPayFor = cat => { const l = S.expenses.filter(e => e.cat === cat && e.pay).sort((a, b) => b.date.localeCompare(a.date))[0]; return l ? l.pay : catById(cat).inc ? 'cuenta' : 'debito'; };
+// Pluxee balance: what was loaded minus what was spent with it, over everything recorded.
+function pluxee(list){ const inc = total(list.filter(e => isInc(e) && payOf(e) === 'pluxee')), out = total(list.filter(e => !isInc(e) && payOf(e) === 'pluxee')); return {inc, out, bal: r2(inc - out)}; }
 const EXTRA_COLORS = ['#C46A2B', '#4D9DE0', '#7A9E3B', '#B565A7', '#5E8C8A'];
 
 let S;
@@ -546,7 +559,10 @@ function payPanel(list, prevList, prevName){
   const rows = PAYS.map(x => { const d = cur[x.id] - prev[x.id];
     return `<div class="payrow"><i class="paysw" style="background:${x.color}"></i><span>${x.name}${prev[x.id] || cur[x.id] ? `<span class="small muted" style="display:block">${Math.abs(d) < 1 ? 'igual que' : `${eur0.format(Math.abs(d))} ${d > 0 ? 'más' : 'menos'} que`} en ${prevName}</span>` : ''}</span>
       <span class="num">${eur.format(cur[x.id])}</span><span class="pc">${Math.round(cur[x.id] / tot * 100)}%</span></div>`; }).join('');
-  return `<div class="panel"><h2>Cómo pagas este mes</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}</div>`;
+  const pm = pluxee(inMonth(TY, TM)), pa = pluxee(S.expenses);
+  const plx = pm.inc || pm.out || pa.inc ? `<div class="plx"><div><span class="small muted">Saldo Pluxee</span><strong class="num ${pa.bal < 0 ? 'up' : ''}">${eur.format(pa.bal)}</strong></div>
+    <p class="small muted">Este mes has recibido ${eur.format(pm.inc)} y gastado ${eur.format(pm.out)}${pm.inc ? `, el ${Math.round(Math.min(pm.out / pm.inc, 9.99) * 100)}% de la carga` : ''}.${pa.bal < 0 ? ' El saldo sale negativo: puede que falte apuntar alguna carga de Pluxee.' : ''}</p></div>` : '';
+  return `<div class="panel"><h2>Cómo pagas este mes</h2><div class="paybar" role="img" aria-label="Reparto del gasto por método de pago">${bar}</div>${rows}${plx}</div>`;
 }
 
 const LOGO = '<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="var(--accent)"/><circle cx="15" cy="15" r="9" fill="none" stroke="var(--note-solid)" stroke-width="2.2"/><circle cx="15" cy="15" r="5.2" fill="none" stroke="var(--note-solid)" stroke-width="1.2" stroke-dasharray="1.6 1.6"/><circle cx="15" cy="15" r="2" fill="var(--note-solid)"/></svg>';
@@ -592,7 +608,7 @@ function itemHtml(e){
   const c = catById(e.cat);
   const src = e.source === 'ticket' ? '<span class="badge">ticket</span>' : e.source === 'extracto' ? '<span class="badge">extracto</span>' : '';
   return `<button class="item" data-id="${e.id}"><i class="dot" style="background:${c.color}"></i>
-    <span class="txt"><span class="t1">${esc(e.concept)}${src}</span><span class="t2" style="display:block">${esc(c.name)}${c.inc ? '' : ` · <span style="color:${payById(payOf(e)).color}">${payById(payOf(e)).name}</span>`}</span></span>
+    <span class="txt"><span class="t1">${esc(e.concept)}${src}</span><span class="t2" style="display:block">${esc(c.name)}${c.inc && payOf(e) === 'cuenta' ? '' : ` · <span style="color:${payById(payOf(e)).color}">${payById(payOf(e)).name}</span>`}</span></span>
     <span class="amt num ${c.inc ? 'down' : ''}">${c.inc ? '+' : ''}${eur.format(e.amount)}</span></button>`;
 }
 
@@ -602,7 +618,7 @@ function renderMovs(keepSearch){
   const list = inMonth(M.y, M.m)
     .filter(e => M.t === 'todos' || (M.t === 'ingresos') === isInc(e))
     .filter(e => !M.cat || e.cat === M.cat)
-    .filter(e => !M.pay || (!isInc(e) && payOf(e) === M.pay))
+    .filter(e => !M.pay || payOf(e) === M.pay)
     .filter(e => !M.q || e.concept.toLowerCase().includes(M.q.toLowerCase()))
     .sort((a, b) => b.date.localeCompare(a.date));
   const groups = {};
@@ -628,7 +644,7 @@ function renderMovs(keepSearch){
     <input class="search" id="q" type="search" placeholder="Buscar por concepto" value="${esc(M.q)}" enterkeyhint="search" autocomplete="off">
     <div class="seg seg2" id="mtype" role="group" aria-label="Tipo de movimiento">${['todos','gastos','ingresos'].map(t => `<button data-t="${t}" aria-pressed="${M.t === t}">${cap(t)}</button>`).join('')}</div>
     <div class="chips" id="movchips">${chips}</div>
-    ${M.t === 'ingresos' ? '' : `<div class="seg pay" id="paychips" role="group" aria-label="Método de pago"><button class="chip" data-pay="" aria-pressed="${!M.pay}">Cualquiera</button>${PAYS.map(x => `<button class="chip" data-pay="${x.id}" aria-pressed="${M.pay === x.id}"><i class="paysw" style="background:${x.color};margin-right:5px"></i>${x.name}</button>`).join('')}</div>`}
+    ${`<div class="seg pay" id="paychips" role="group" aria-label="Método de pago" style="grid-template-columns:repeat(${M.t === 'ingresos' ? 3 : 4},1fr)"><button class="chip" data-pay="" aria-pressed="${!M.pay}">Cualquiera</button>${(M.t === 'ingresos' ? INS : PAYS).map(x => `<button class="chip" data-pay="${x.id}" aria-pressed="${M.pay === x.id}"><i class="paysw" style="background:${x.color};margin-right:5px"></i>${x.name}</button>`).join('')}</div>`}
     <div id="movbody">${body}</div>`;
 }
 
@@ -829,10 +845,11 @@ function evoPay(months){
   const full = data.slice(0, 11), totAll = full.reduce((s, x) => s + x.t, 0) || 1;
   const avgTxt = PAYS.map(x => `${x.name} ${Math.round(full.reduce((s, m) => s + m.p[x.id], 0) / totAll * 100)}%`).join(', ');
   const plx = full.reduce((s, m) => s + m.p.pluxee, 0) / full.length;
+  const plxIn = full.reduce((s, m) => s + pluxee(inMonth(m.y, m.m)).inc, 0) / full.length;
   return `<div class="panel"><h2>Por método de pago</h2>
     <figure><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto por método de pago en los últimos 12 meses">${g}${bars}</svg>
     <figcaption style="flex-direction:column;gap:4px"><span class="key">${PAYS.map(x => `<i class="paysw" style="background:${x.color};margin-left:${x.id === 'debito' ? 0 : 10}px"></i>${x.name}`).join(' ')}</span>
-    <span>En el último año: ${avgTxt}. Con Pluxee pagas de media ${eur0.format(plx)} al mes.</span></figcaption></figure></div>`;
+    <span>En el último año: ${avgTxt}. Con Pluxee pagas de media ${eur0.format(plx)} al mes${plxIn ? ` y recibes ${eur0.format(plxIn)}` : ''}.</span></figcaption></figure></div>`;
 }
 
 /* ---------- Evolución por categoría ---------- */
@@ -951,15 +968,15 @@ function init(){
 /* ---------- Sheet ---------- */
 let editId = null, mode = 'manual', source = 'manual';
 let kind = 'gasto', pay = 'debito';
-function setPay(p){ pay = p; document.querySelectorAll('#f-pay button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === p)); }
-$('#f-pay').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPay(b.dataset.p); });
+function setPay(p){ pay = p; document.querySelectorAll('#f-pay button, #f-in button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === p)); }
+['#f-pay', '#f-in'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPay(b.dataset.p); }));
 $('#f-cats').addEventListener('change', e => { if (!editId && e.target.name === 'f-cat') setPay(lastPayFor(e.target.value)); });
 function setKind(k, sel){
   kind = k;
   document.querySelectorAll('#f-kind button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
   const list = S.cats.filter(c => (k === 'ingreso') === !!c.inc);
   catChips(sel && list.some(c => c.id === sel) ? sel : list[0] && list[0].id, list);
-  $('#f-payf').hidden = k === 'ingreso';
+  $('#f-payf').hidden = k === 'ingreso'; $('#f-inf').hidden = k !== 'ingreso';
   if (!editId) $('#sheet-title').textContent = k === 'ingreso' ? 'Nuevo ingreso' : 'Nuevo gasto';
   $('#f-save').textContent = editId ? 'Guardar cambios' : (k === 'ingreso' ? 'Guardar ingreso' : 'Guardar gasto');
   $('#f-concept').placeholder = k === 'ingreso' ? 'Por ejemplo, Nómina' : 'Por ejemplo, Mercadona';
@@ -1006,7 +1023,7 @@ $('#scrim').addEventListener('click', closeSheet);
 $('#sheet-close').addEventListener('click', closeSheet);
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#sheet').classList.contains('on')) closeSheet(); });
 $('#seg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
-$('#f-kind').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setKind(b.dataset.k); });
+$('#f-kind').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; setKind(b.dataset.k); const c = document.querySelector('input[name="f-cat"]:checked'); setPay(lastPayFor(c ? c.value : (b.dataset.k === 'ingreso' ? 'nomina' : 'super'))); });
 
 const parseAmount = s => { s = String(s).replace(/[€\s]/g, ''); if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.'); else s = s.replace(',', '.'); return parseFloat(s); };
 
@@ -1017,7 +1034,7 @@ $('#p-manual').addEventListener('submit', ev => {
   const cat = (document.querySelector('input[name="f-cat"]:checked') || {}).value || 'otros';
   const concept = $('#f-concept').value.trim() || catById(cat).name;
   const date = $('#f-date').value || todayIso;
-  const p = catById(cat).inc ? undefined : pay;
+  const p = catById(cat).inc ? (pay === 'pluxee' ? 'pluxee' : 'cuenta') : (PAYS.some(x => x.id === pay) ? pay : 'debito');
   if (editId){ Object.assign(S.expenses.find(x => x.id === editId), {amount, cat, concept, date, pay: p}); toast('Cambios guardados'); }
   else { S.expenses.push({id:uid(), date, amount, concept, cat, source, pay: p}); toast(kind === 'ingreso' ? 'Ingreso guardado' : 'Gasto guardado'); }
   save(); closeSheet(); refresh();
@@ -1189,7 +1206,7 @@ $('#csv-list').addEventListener('change', e => { const s = e.target.closest('sel
 $('#csv-import').addEventListener('click', () => {
   const rows = pending.filter(r => r.use);
   const p = $('#csv-pay').value;
-  rows.forEach(r => S.expenses.push({id:uid(), date:r.date, amount:r.amount, concept:r.concept, cat:r.cat, source:'extracto', pay: catById(r.cat).inc ? undefined : p}));
+  rows.forEach(r => S.expenses.push({id:uid(), date:r.date, amount:r.amount, concept:r.concept, cat:r.cat, source:'extracto', pay: catById(r.cat).inc ? (p === 'pluxee' ? 'pluxee' : 'cuenta') : p}));
   save(); closeSheet(); refresh(); toast(`${rows.length} ${rows.length === 1 ? 'movimiento importado' : 'movimientos importados'}`);
 });
 
@@ -1215,7 +1232,7 @@ document.querySelector('main').addEventListener('click', e => {
   if (e.target.closest('#g-reset')){ ensurePlan(planYM).income = null; save(); renderPlan(); return; }
   const opt = e.target.closest('#mmenu [data-ym]');
   if (opt){ M.y = +opt.dataset.ym.slice(0, 4); M.m = +opt.dataset.ym.slice(5) - 1; M.cat = null; renderMovs(); slideIn('#movbody'); return; }
-  const mt = e.target.closest('#mtype button'); if (mt){ M.t = mt.dataset.t; M.cat = null; if (M.t === 'ingresos') M.pay = null; renderMovs(); return; }
+  const mt = e.target.closest('#mtype button'); if (mt){ M.t = mt.dataset.t; M.cat = null; M.pay = null; renderMovs(); return; }
   const nk = e.target.closest('#newcat-kind button'); if (nk){ newKind = nk.dataset.k; const v = $('#newcat-name').value; renderCats(); $('#newcat-name').value = v; return; }
   const ch = e.target.closest('#movchips .chip');
   const pc = e.target.closest('#paychips .chip');

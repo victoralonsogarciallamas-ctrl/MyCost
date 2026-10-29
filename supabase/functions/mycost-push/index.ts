@@ -64,6 +64,15 @@ Deno.serve(async (req) => {
     if (req.method === "GET") return new Response(JSON.stringify({ publicKey: (await keys()).public_key }), { headers: h });
     const b = await req.json().catch(() => ({}));
     if (b.action === "cron") return new Response(JSON.stringify(await cron()), { headers: h });
+    // Test notification to every registered phone, sent from the database console when needed.
+    if (b.action === "test") {
+      const k = await keys();
+      webpush.setVapidDetails("mailto:avisos@mycost.app", k.public_key, k.private_key);
+      const { data } = await db.from("push_subs").select("sub");
+      let sent = 0;
+      for (const s of data || []) { try { await webpush.sendNotification(s.sub, JSON.stringify({ title: "Prueba de MyCost", body: "Si ves esto, los avisos funcionan." })); sent++; } catch (_) { /* keep going */ } }
+      return new Response(JSON.stringify({ sent }), { headers: h });
+    }
     const sub = b.sub;
     if (!sub || typeof sub.endpoint !== "string" || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) {
       return new Response(JSON.stringify({ error: "bad subscription" }), { status: 400, headers: h });

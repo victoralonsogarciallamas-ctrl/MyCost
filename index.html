@@ -393,7 +393,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
     <div id="p-extracto" hidden style="display:flex;flex-direction:column;gap:14px">
       <p class="muted">Sube el extracto que descargas de tu banco. Te propongo una categoría para cada gasto e ingreso, y tú la cambias si hace falta.</p>
       <label class="primary btn" for="f-csv">Elegir archivo (PDF, Excel o CSV)</label>
-      <input class="sr" type="file" id="f-csv" accept=".pdf,application/pdf,.csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      <input class="sr" type="file" id="f-csv" multiple accept=".pdf,application/pdf,.csv,.xls,.xlsx,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
       <p class="muted small" id="csv-status" aria-live="polite"></p>
       <p class="err" id="csv-err" hidden></p>
       <div id="csv-list"></div>
@@ -413,7 +413,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.16';
 const CHANGELOG = [
-  {v:'1.16', items:['Ahora puedes importar el extracto del banco en PDF, además de Excel o CSV. Se lee en tu móvil: el archivo no sale de aquí.']},
+  {v:'1.16', items:['Ahora puedes importar el extracto del banco en PDF, además de Excel o CSV. Se lee en tu móvil: el archivo no sale de aquí.', 'También lee los justificantes de un solo movimiento, como el Adeudo en cuenta de Cajamar. Puedes elegir varios PDF a la vez.']},
   {v:'1.15', items:['Al cambiar de pestaña, la pantalla se abre siempre desde arriba.']},
   {v:'1.14', items:['La tarjeta de lo gastado se abre con el filtro Débito. Pulsa Todo para ver el total.', 'Las cifras de abajo de la tarjeta cambian con el filtro. Con Débito ves lo que te queda en la cuenta, cargo de la tarjeta incluido, y tu meta de ahorro, que solo se mide ahí. Con Crédito ves lo reembolsado y lo pendiente, y con Pluxee lo recibido y el saldo disponible.']},
   {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.', 'El plan de Ahorro se calcula con tu nómina: los reembolsos y otros ingresos ya no cambian la meta.']},
@@ -1417,17 +1417,36 @@ function pdfToRows(lines){
       .replace(PDF_AMT, '').replace(/(^|\s)\d{1,2}[\/.-]\d{1,2}([\/.-]\d{2,4})?(?=\s|$)/g, ' ').replace(/€|EUR/g, ' ').replace(/\s+/g, ' ').trim() || 'Sin concepto';
     rows.push([`${date.slice(8)}/${date.slice(5, 7)}/${date.slice(0, 4)}`, concept.replace(/;/g, ' '), String(r2(sign * v)).replace('.', ',')]);
   }
+  if (!rows.length){ const one = pdfReceipt(lines); if (one) rows.push(one); }
   if (!rows.length) throw new Error('No he encontrado movimientos en este PDF. Si tu banco permite descargarlo en Excel o CSV, prueba con ese formato.');
   return 'Fecha;Concepto;Importe\n' + rows.map(r => r.join(';')).join('\n');
 }
+/* A single-movement receipt (Cajamar's "Adeudo en cuenta" and similar): labels on one line,
+   their values on the next one, right below them. */
+function pdfReceipt(lines){
+  const below = (re, ok) => { for (let k = 0; k < lines.length - 1; k++){ const lab = lines[k].find(i => re.test(i.s)); if (!lab) continue;
+    const v = lines[k + 1].filter(i => ok(i.s)).sort((a, b) => Math.abs(a.x - lab.x) - Math.abs(b.x - lab.x))[0]; if (v) return v.s; } return null; };
+  const amt = below(/^importe/i, isAmt); if (!amt) return null;
+  const all = lines.map(l => l.map(i => i.s).join(' ')).join('\n');
+  const day = below(/^valor/i, isDay) || below(/^fecha/i, isDay) || (all.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/) || [])[0]; if (!day) return null;
+  const cl = lines.find(l => /^concepto/i.test(l[0].s));
+  let concept = cl ? cl.slice(1).map(i => i.s).join(' ') : '';
+  concept = concept.replace(/\b\d*\*+\d*\b|\b\d{3,}\b|\blicencia\b|\bcomercio\b/gi, ' ').replace(/op\.?\s?tarj\.?\s?compra/i, 'Compra con tarjeta').replace(/\s+/g, ' ').trim() || 'Movimiento';
+  const income = /\babono\b/i.test(lines.slice(0, 3).map(l => l.map(i => i.s).join(' ')).join(' ')) && !/adeudo|cargo/i.test(all.slice(0, 200));
+  const [d, m, y] = day.split(/[\/.-]/), v = Math.abs(parseAmount(amt.replace(/[-−–]/g, '')));
+  return [`${pad(+d)}/${pad(+m)}/${y.length === 2 ? '20' + y : y}`, concept.replace(/;/g, ' '), String(r2(income ? v : -v)).replace('.', ',')];
+}
 $('#f-csv').addEventListener('change', async e => {
-  const f = e.target.files && e.target.files[0]; if (!f) return; e.target.value = '';
+  const files = [...(e.target.files || [])], f = files[0]; if (!f) return; e.target.value = '';
   $('#csv-err').hidden = true; $('#csv-status').textContent = 'Leyendo el extracto…';
   try {
     if (/\.pdf$/i.test(f.name) || f.type === 'application/pdf'){
-      const [buf] = await Promise.all([f.arrayBuffer(), loadLib('pdf', PDFJS)]);
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
-      loadCsv(pdfToRows(await pdfLines(new Uint8Array(buf))));
+      // Several PDFs can be picked at once, for example a handful of single-movement receipts.
+      await loadLib('pdf', PDFJS); pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
+      const parts = [];
+      for (const pf of files.filter(x => /\.pdf$/i.test(x.name) || x.type === 'application/pdf')){ try { parts.push(pdfToRows(await pdfLines(new Uint8Array(await pf.arrayBuffer()))).split('\n').slice(1)); } catch (err) { if (files.length === 1) throw err; } }
+      if (!parts.length) throw new Error('No he encontrado movimientos en este PDF. Si tu banco permite descargarlo en Excel o CSV, prueba con ese formato.');
+      loadCsv('Fecha;Concepto;Importe\n' + parts.flat().join('\n'));
     } else if (/\.xlsx?$/i.test(f.name) || /sheet|excel/i.test(f.type)){
       const [buf] = await Promise.all([f.arrayBuffer(), loadLib('xlsx', XLSX_URL)]);
       loadCsv(sheetToText(new Uint8Array(buf)));

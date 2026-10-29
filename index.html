@@ -399,8 +399,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.5';
+const APP_VERSION = '1.6';
 const CHANGELOG = [
+  {v:'1.6', items:['En Inicio, la tarjeta de la cuenta de ahorro aparece ahora la primera, antes de lo gastado este mes.']},
   {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'Inicio más limpio: el saldo de tu cuenta de ahorro tiene su propia tarjeta verde, y quitamos el gráfico Ritmo del mes.', 'En Evolución, los ingresos se ven como una línea con puntos sobre las barras de gasto.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
@@ -557,6 +558,7 @@ function renderInicio(){
       <p class="small muted">Tus datos se guardan solo en este móvil. Nadie más los ve. Haz una copia de seguridad de vez en cuando desde Ahorro, en Categorías y copia de seguridad.</p></div>`;
   if (!S.expenses.length){ $('#v-inicio').innerHTML = welcome; return; }
   $('#v-inicio').innerHTML = `
+    ${savingsPanel()}
     <div class="note-card" id="note"><canvas id="note-art" aria-hidden="true"></canvas>
       <div class="note-top"><span>Gastado este mes</span><span class="pill-s">${monthLong(TY, TM)} ${TY}</span></div>
       <p class="note-amt" id="note-amt" data-v="${spent}">${amtHtml(spent)}</p>
@@ -567,7 +569,6 @@ function renderInicio(){
         <div><span>Meta ${getPlan(CUR).pct}%</span><strong class="${ratio !== null && ratio >= getPlan(CUR).pct ? 'down' : ''}">${ratio === null ? 'sin datos' : ratio + '%'}</strong></div>
       </div>
     </div>
-    ${savingsPanel()}
     <div class="panel"><h2>En qué se va este mes</h2>${catRows || '<p class="muted">Aún no hay gastos este mes. Añade el primero con el botón +.</p>'}</div>
     ${spent ? payPanel(expOf(inMonth(TY, TM)), expOf(inMonth(py, pm)), prevName) : ''}
     ${creditPanel()}

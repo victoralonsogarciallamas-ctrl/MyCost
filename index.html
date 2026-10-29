@@ -857,7 +857,7 @@ document.querySelector('.tabbar nav').addEventListener('click', e => {
 });
 window.addEventListener('hashchange', route);
 function init(){
-  $('#brandbar').innerHTML = `<div><div class="brand">${LOGO}MyCost</div><span class="today">${TODAY.toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'short'}).replace('.', '')}</span></div>`;
+  $('#brandbar').innerHTML = `<div><div class="brand">${LOGO}MyCost</div><span class="today" style="color:var(--accent);font-weight:700">Prueba de actualización ✓</span></div>`;
   renderAll();
   const t = $('#track'); t.style.transition = 'none'; go(nameFromHash());
   void t.offsetWidth; t.style.transition = '';

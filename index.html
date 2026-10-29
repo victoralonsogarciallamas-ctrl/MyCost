@@ -87,6 +87,10 @@ h2{font-family:var(--display);font-size:19px;letter-spacing:-.02em;margin:0 0 10
 position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .note-top{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:13px;color:var(--note-muted)}
 .notedd{position:relative}
+.notepay{position:relative;display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.notepay button{font:inherit;font-size:12px;font-weight:500;padding:4px 11px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:transparent;color:var(--note-muted);cursor:pointer}
+.notepay button[aria-pressed="true"]{background:var(--note-ink);color:var(--note-solid);border-color:var(--note-ink)}
+.notepay+.note-amt{margin-top:18px}
 .notedd .ddbtn.pill-s{background:transparent;color:var(--note-ink);font-size:13px;font-weight:500;padding:3px 8px 3px 10px;gap:4px;border:1px solid rgba(255,255,255,.22)}
 .notedd .ddmenu{color:var(--ink)}
 .note-card:has(.ddmenu:not(.closed)){z-index:9}
@@ -407,8 +411,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.13';
 const CHANGELOG = [
+  {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.']},
   {v:'1.12', items:['La tarjeta de Pluxee muestra lo que te sobró el mes anterior, que se suma a lo que recibes este mes.']},
   {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
   {v:'1.10', items:['Los filtros de mes de Inicio y Movimientos muestran todos los meses del año, aunque no tengan movimientos.']},
@@ -511,9 +516,9 @@ const inMonth = (y, m) => { const p = `${y}-${pad(m + 1)}-`; return S.expenses.f
 const total = list => r2(list.reduce((s, e) => s + e.amount, 0));
 const byCat = list => { const o = {}; list.forEach(e => { o[e.cat] = (o[e.cat] || 0) + e.amount; }); return o; };
 const shift = (y, m, k) => { const d = new Date(y, m + k, 1); return [d.getFullYear(), d.getMonth()]; };
-function cumulative(y, m, upto){
+function cumulative(y, m, upto, pay = 'todos'){
   const dim = daysIn(y, m), per = new Array(dim + 1).fill(0);
-  expOf(inMonth(y, m)).forEach(e => { per[+e.date.slice(8, 10)] += e.amount; });
+  byPayOf(expOf(inMonth(y, m)), pay).forEach(e => { per[+e.date.slice(8, 10)] += e.amount; });
   const out = []; let s = 0;
   for (let d = 1; d <= Math.min(upto, dim); d++){ s += per[d]; out.push(s); }
   return out;
@@ -521,21 +526,24 @@ function cumulative(y, m, upto){
 
 /* ---------- Inicio ---------- */
 // Inicio shows one month at a time; the current month by default.
-const H = {y: TY, m: TM};
+const H = {y: TY, m: TM, pay: 'todos'};
+// The month card can show only what was paid with one method.
+const byPayOf = (list, pay) => pay === 'todos' ? list : list.filter(e => payOf(e) === pay);
 // Month filters list every month of this year, empty or not, plus earlier months that have movements. Newest first.
 const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`)))].sort().reverse();
 function renderInicio(){
   const HY = H.y, HM = H.m, isCur = HY === TY && HM === TM, hk = ymKey(HY, HM);
   const [py, pm] = shift(HY, HM, -1);
-  const spent = total(expOf(inMonth(HY, HM)));
+  const fx = l => byPayOf(expOf(l), H.pay), payName = H.pay === 'todos' ? '' : ' con ' + (H.pay === 'pluxee' ? 'Pluxee' : PAYS.find(x => x.id === H.pay).name.toLowerCase());
+  const spent = total(fx(inMonth(HY, HM)));
   const prevName = monthLong(py, pm);
   // The current month is compared with the previous one at the same day; a past month with the whole previous month.
-  const cmpPrev = isCur ? (cumulative(py, pm, 31)[Math.min(TD, daysIn(py, pm)) - 1] || 0) : total(expOf(inMonth(py, pm)));
+  const cmpPrev = isCur ? (cumulative(py, pm, 31, H.pay)[Math.min(TD, daysIn(py, pm)) - 1] || 0) : total(fx(inMonth(py, pm)));
   const diff = spent - cmpPrev, when = isCur ? `a estas alturas de ${prevName}` : `en ${prevName}`;
   const deltaTxt = Math.abs(diff) < 1 ? `Lo mismo que ${when}` : `<b class="${diff > 0 ? 'up' : 'down'}">${eur0.format(Math.abs(diff))} ${diff > 0 ? 'más' : 'menos'}</b> que ${when}`;
   const yms = monthList();
   const opts = yms.map(k => { const y = +k.slice(0, 4), m = +k.slice(5) - 1;
-    return `<button role="option" data-hym="${k}" aria-selected="${y === HY && m === HM}"><span>${cap(monthLong(y, m))} ${y}</span><span class="num">${eur0.format(total(expOf(inMonth(y, m))))}</span></button>`; }).join('');
+    return `<button role="option" data-hym="${k}" aria-selected="${y === HY && m === HM}"><span>${cap(monthLong(y, m))} ${y}</span><span class="num">${eur0.format(total(fx(inMonth(y, m))))}</span></button>`; }).join('');
   const monthDD = `<div class="dd notedd"><button class="ddbtn pill-s" aria-haspopup="listbox" aria-expanded="false">${monthLong(HY, HM)} ${HY}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
     <div class="ddmenu closed" role="listbox" aria-label="Elegir mes">${opts}</div></div>`;
   const ofMonth = isCur ? 'este mes' : `en ${monthLong(HY, HM)}`;
@@ -565,7 +573,8 @@ function renderInicio(){
   $('#v-inicio').innerHTML = `
     ${savingsPanel(HY, HM)}
     <div class="note-card" id="note"><canvas id="note-art" aria-hidden="true"></canvas>
-      <div class="note-top"><span>${isCur ? 'Gastado este mes' : `Gastado en ${monthLong(HY, HM)}`}</span>${monthDD}</div>
+      <div class="note-top"><span>${isCur ? 'Gastado este mes' : `Gastado en ${monthLong(HY, HM)}`}${payName}</span>${monthDD}</div>
+      <div class="notepay" role="group" aria-label="Filtrar por método de pago">${[{id:'todos', name:'Todo'}, ...PAYS].map(x => `<button type="button" data-hpay="${x.id}" aria-pressed="${H.pay === x.id}">${x.name}</button>`).join('')}</div>
       <p class="note-amt" id="note-amt" data-v="${spent}">${amtHtml(spent)}</p>
       <p class="note-delta">${deltaTxt}</p>
       <div class="note-stats">
@@ -575,7 +584,7 @@ function renderInicio(){
       </div>
     </div>
     <div class="panel"><h2>${isCur ? 'En qué se va este mes' : `En qué se fue en ${monthLong(HY, HM)}`}</h2>${catRows || `<p class="muted">No hay gastos ${ofMonth}.${isCur ? ' Añade el primero con el botón +.' : ''}</p>`}</div>
-    ${spent ? payPanel(expOf(inMonth(HY, HM)), expOf(inMonth(py, pm)), prevName, HY, HM) : ''}
+    ${expOf(inMonth(HY, HM)).length ? payPanel(expOf(inMonth(HY, HM)), expOf(inMonth(py, pm)), prevName, HY, HM) : ''}
     ${pluxeePanel(HY, HM)}
     ${creditPanel(HY, HM)}
     <div><h2>${isCur ? 'Últimos movimientos' : `Movimientos de ${monthLong(HY, HM)}`}</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
@@ -1371,6 +1380,7 @@ document.querySelector('main').addEventListener('click', e => {
   const g = e.target.closest('[data-go]'); if (g){ try { history.replaceState(null, '', '#' + g.dataset.go); } catch (err) {} go(g.dataset.go); return; }
   const it = e.target.closest('.item'); if (it){ const x = S.expenses.find(z => z.id === it.dataset.id); if (x) openSheet(x); return; }
   const db = e.target.closest('.ddbtn'); if (db){ toggleDD(db.parentElement); return; }
+  const hp = e.target.closest('[data-hpay]'); if (hp){ H.pay = hp.dataset.hpay; noteDrawn = false; renderInicio(); return; }
   const ho = e.target.closest('[data-hym]'); if (ho){ H.y = +ho.dataset.hym.slice(0, 4); H.m = +ho.dataset.hym.slice(5) - 1; noteDrawn = false; renderInicio(); return; }
   const po = e.target.closest('[data-pym]'); if (po){ planYM = po.dataset.pym; renderPlan(); slideIn('#v-ahorro .panel'); return; }
   const co = e.target.closest('[data-ecat]'); if (co){ evoCat = co.dataset.ecat; renderEvoCat(); slideIn('#evo-cat figure'); return; }

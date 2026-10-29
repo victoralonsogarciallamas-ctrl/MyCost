@@ -1,6 +1,6 @@
 /* MyCost service worker: the app shell is cached so the app opens without connection.
    The ticket and Excel readers (vendor/) and the fonts are cached the first time they are used. */
-const VERSION = 'mycost-1.17.0';
+const VERSION = 'mycost-1.18.0';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/apple-touch-icon.png'];
 const FONTS = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
 
@@ -22,4 +22,16 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(req, {cache: 'no-cache'}).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res; })
       .catch(() => caches.match(req).then(r => r || caches.match('./index.html'))));
   }
+});
+
+// Tapping a notification brings the app to the front, or opens it.
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(ws => ws.length ? ws[0].focus() : self.clients.openWindow('./')));
+});
+// Daily reminder sent by the server when no expense was added in 24 hours.
+self.addEventListener('push', e => {
+  let d = {title: 'MyCost', body: 'Apunta tus gastos de hoy.'};
+  try { d = Object.assign(d, e.data.json()); } catch (err) {}
+  e.waitUntil(self.registration.showNotification(d.title, {body: d.body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'mycost-reminder'}));
 });

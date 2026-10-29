@@ -411,8 +411,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.17';
+const APP_VERSION = '1.18';
 const CHANGELOG = [
+  {v:'1.18', items:['Nuevos avisos: si pasan 24 horas sin apuntar un gasto te lo recuerdo con una notificación, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite cumplir tu meta de ahorro del mes, y cuando lo pases. Actívalos en Ahorro, en Categorías, avisos y copia de seguridad.']},
   {v:'1.17', items:['El mes que eliges en Inicio, Movimientos o Ahorro se aplica en las tres pestañas a la vez.']},
   {v:'1.16', items:['Ahora puedes importar el extracto del banco en PDF, además de Excel o CSV. Se lee en tu móvil: el archivo no sale de aquí.', 'También lee los justificantes de un solo movimiento, como el Adeudo en cuenta de Cajamar. Puedes elegir varios PDF a la vez.']},
   {v:'1.15', items:['Al cambiar de pestaña, la pantalla se abre siempre desde arriba.']},
@@ -952,7 +953,7 @@ function renderPlan(){
       <p class="small muted" style="margin:8px 0 10px">${goal ? (a.month >= goal - 1 ? `Has pasado a ahorro lo que te propusiste (${eur0.format(goal)}).` : `Para llegar a tu meta te faltan ${eur0.format(goal - a.month)} por pasar a ahorro.`) : ''} Apunta cada traspaso como gasto en <b>Transferencia a ahorro</b>: no cuenta como gasto.</p>
       <label class="incrow" for="g-start"><span>Saldo antes de empezar a usar MyCost</span><span class="incin"><input id="g-start" inputmode="decimal" value="${String(r2(S.savingsStart || 0)).replace('.', ',')}" autocomplete="off" enterkeyhint="done">€</span></label></div>`; })()}
     <div class="panel"><h2>Cómo te ha ido</h2>${planHistory()}</div>
-    <button class="secondary" data-go="categorias">Categorías y copia de seguridad</button>`;
+    <button class="secondary" data-go="categorias">Categorías, avisos y copia de seguridad</button>`;
   renderPlanRes();
 }
 function planHistory(){
@@ -1095,6 +1096,11 @@ function renderCats(){
       <button class="secondary" type="submit">Añadir categoría</button>
     </form>
     <div class="panel" style="display:flex;flex-direction:column;gap:10px">
+      <h2 style="margin:0">Avisos</h2>
+      <p class="small muted">Te recuerdo apuntar tus gastos si pasan 24 horas sin hacerlo, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite ahorrar tu meta del mes, y cuando lo pases. Para el recordatorio, solo sale del móvil la hora de tu último gasto, nunca importes ni conceptos.${/iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone ? ' En iPhone, primero instala MyCost en la pantalla de inicio.' : ''}</p>
+      <button class="secondary" id="nt-toggle">${notifOn() ? 'Desactivar avisos' : 'Activar avisos'}</button>
+    </div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px">
       <h2 style="margin:0">Copia de seguridad</h2>
       <p class="small muted">Tus datos viven solo en este móvil. Si borras la app o cambias de teléfono, se pierden. Guarda una copia en Archivos, iCloud o Drive y recupérala cuando la necesites.</p>
       <button class="secondary" id="bk-export">Guardar copia de seguridad</button>
@@ -1125,7 +1131,55 @@ function go(name){
 const nameFromHash = () => { const v = (location.hash || '#inicio').slice(1); return VIEWS[v] ? v : 'inicio'; };
 function route(){ const n = nameFromHash(); if (n !== curView) go(n); }
 function renderAll(){ ORDER.forEach(k => VIEWS[k]()); }
-const refresh = renderAll;
+const refresh = () => { renderAll(); checkBudget(); };
+
+/* Notifications: shown by the service worker so they also appear with the app in the background. */
+const notifOn = () => !!S.notif && 'Notification' in window && Notification.permission === 'granted';
+async function notify(title, body){
+  if (!notifOn()) return;
+  try { (await navigator.serviceWorker.ready).showNotification(title, {body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: 'mycost-' + title}); }
+  catch (err) { try { new Notification(title, {body, icon: 'icons/icon-192.png'}); } catch (e) {} }
+}
+// Budget alert: once at 90% of what this month's goal lets you spend from the account, and once more past 100%.
+function checkBudget(){
+  if (!notifOn()) return;
+  const inc = monthIncome(CUR).v, pct = getPlan(CUR).pct; if (!inc || !S.expenses.length) return;
+  const budget = inc * (1 - pct / 100), spent = total(acctExp(inMonth(TY, TM)));
+  const level = spent > budget ? 2 : spent >= budget * .9 ? 1 : 0;
+  S.alerts = S.alerts || {}; if (level <= (S.alerts[CUR] || 0)) return;
+  S.alerts[CUR] = level; save();
+  if (level === 2) notify(`Has pasado tu límite de ${monthLong(TY, TM)}`, `Llevas ${eur0.format(spent)} gastados, ${eur0.format(spent - budget)} más de lo que te permite ahorrar el ${pct}% este mes.`);
+  else notify(`Te quedan ${eur0.format(budget - spent)} este mes`, `Llevas ${eur0.format(spent)} de ${eur0.format(budget)} que puedes gastar para ahorrar el ${pct}% en ${monthLong(TY, TM)}.`);
+}
+/* Daily reminder: the server only gets this phone's push subscription and the time of the last expense,
+   and once an hour sends a reminder to anyone who has gone 24 hours without adding one. */
+const PUSH_URL = 'https://yxumjityvsssrjgfpiib.supabase.co/functions/v1/mycost-push';
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window;
+function markAdded(){ S.lastAdd = new Date().toISOString(); syncPush(); }
+const b64key = k => { const b = atob((k + '='.repeat((4 - k.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushSub(create){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub && create){ const {publicKey} = await (await fetch(PUSH_URL)).json(); sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64key(publicKey)}); }
+  return sub;
+}
+// Called on open and after each expense; subscribes again if the phone dropped the subscription.
+async function syncPush(){
+  if (!notifOn() || !pushOk()) return;
+  try { const sub = await pushSub(true); if (sub) await fetch(PUSH_URL, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'sub', sub: sub.toJSON(), last: S.lastAdd || new Date().toISOString()})}); } catch (err) {}
+}
+async function toggleNotif(){
+  if (notifOn()){
+    S.notif = false; save(); renderCats(); toast('Avisos desactivados');
+    try { const sub = pushOk() && await pushSub(false); if (sub){ await fetch(PUSH_URL, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'unsub', sub: sub.toJSON()})}); await sub.unsubscribe(); } } catch (err) {}
+    return;
+  }
+  if (!('Notification' in window)){ toast(/iPhone|iPad/.test(navigator.userAgent) ? 'Instala MyCost en la pantalla de inicio para recibir avisos.' : 'Este navegador no permite avisos.'); return; }
+  const p = await Notification.requestPermission();
+  S.notif = p === 'granted'; save(); renderCats();
+  if (S.notif){ if (!S.lastAdd) S.lastAdd = new Date().toISOString(); save(); toast('Avisos activados'); await notify('Avisos activados', 'Te avisaré si pasas 24 horas sin apuntar un gasto y cuando te acerques al límite de tu meta.'); checkBudget(); syncPush(); }
+  else toast('No me has dado permiso. Puedes darlo en los ajustes del móvil.');
+}
 function slideIn(sel){
   const el = $(sel); if (!el) return;
   el.animate(reduceMotion() ? [{opacity:0}, {opacity:1}] : [{opacity:0, transform:'translateY(8px)'}, {opacity:1, transform:'translateY(0)'}], {duration: 260, easing: 'cubic-bezier(0.23, 1, 0.32, 1)'});
@@ -1141,7 +1195,7 @@ document.querySelector('.tabbar nav').addEventListener('click', e => {
 window.addEventListener('hashchange', route);
 function init(){
   $('#brandbar').innerHTML = `<div><div class="brand">${LOGO}MyCost</div><span class="today">${TODAY.toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'short'}).replace('.', '')}</span></div>`;
-  renderAll();
+  renderAll(); checkBudget(); syncPush();
   const t = $('#track'); t.style.transition = 'none'; go(nameFromHash());
   void t.offsetWidth; t.style.transition = '';
 }
@@ -1219,7 +1273,7 @@ $('#p-manual').addEventListener('submit', ev => {
   const date = $('#f-date').value || nowIso();
   const p = catById(cat).inc ? (pay === 'pluxee' ? 'pluxee' : 'cuenta') : catById(cat).xfer ? 'debito' : (PAYS.some(x => x.id === pay) ? pay : 'debito');
   if (editId){ Object.assign(S.expenses.find(x => x.id === editId), {amount, cat, concept, date, pay: p}); toast('Cambios guardados'); }
-  else { S.expenses.push({id:uid(), date, amount, concept, cat, source, pay: p}); toast(kind === 'ingreso' ? 'Ingreso guardado' : 'Gasto guardado'); }
+  else { S.expenses.push({id:uid(), date, amount, concept, cat, source, pay: p}); if (!catById(cat).inc) markAdded(); toast(kind === 'ingreso' ? 'Ingreso guardado' : 'Gasto guardado'); }
   save(); closeSheet(); refresh();
 });
 $('#f-amount').addEventListener('input', () => { $('#f-err').hidden = true; });
@@ -1472,6 +1526,7 @@ $('#csv-import').addEventListener('click', () => {
   const rows = pending.filter(r => r.use);
   const p = $('#csv-pay').value;
   rows.forEach(r => S.expenses.push({id:uid(), date:r.date, amount:r.amount, concept:r.concept, cat:r.cat, source:'extracto', pay: catById(r.cat).inc ? (p === 'pluxee' ? 'pluxee' : 'cuenta') : p}));
+  if (rows.some(r => !catById(r.cat).inc)) markAdded();
   save(); closeSheet(); refresh(); toast(`${rows.length} ${rows.length === 1 ? 'movimiento importado' : 'movimientos importados'}`);
 });
 
@@ -1512,6 +1567,7 @@ document.querySelector('main').addEventListener('click', e => {
     resetArmed = false; S = fresh(); save(); renderAll(); toast('Datos borrados');
   }
   if (e.target.closest('#bk-export')) exportBackup();
+  if (e.target.closest('#nt-toggle')) toggleNotif();
   const st = e.target.closest('[data-start]');
   if (st){ openSheet(); setMode(st.dataset.start); if (st.dataset.start === 'manual') $('#f-amount').focus({preventScroll:true});
   }
@@ -1566,7 +1622,7 @@ document.addEventListener('change', async e => {
     if (!d || !Array.isArray(d.expenses) || !Array.isArray(d.cats)) throw new Error();
     const ok = confirm(`Esta copia tiene ${d.expenses.length} movimientos. Al recuperarla se sustituyen los datos que hay ahora en el móvil. ¿Continuar?`);
     if (!ok) return;
-    S = {expenses: d.expenses, cats: d.cats, plans: d.plans || {}, lastBackup: d.lastBackup, savingsStart: d.savingsStart || 0}; save(); renderAll(); toast('Copia recuperada');
+    S = {expenses: d.expenses, cats: d.cats, plans: d.plans || {}, lastBackup: d.lastBackup, savingsStart: d.savingsStart || 0, notif: S.notif, alerts: S.alerts, lastAdd: S.lastAdd}; save(); renderAll(); toast('Copia recuperada');
   } catch (err) { toast('Ese archivo no es una copia de MyCost'); }
 });
 

@@ -226,6 +226,19 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .sheet input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-height:46px;text-align:left}
 .sheet input[type=date]::-webkit-date-and-time-value{text-align:left}
 .scrim{touch-action:none}
+.news{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--scrim);opacity:0;transition:opacity 260ms ease}
+.news.on{opacity:1}
+.news-card{width:100%;max-width:400px;max-height:80dvh;overflow-y:auto;background:var(--surface);border-radius:24px;padding:22px 20px 18px;box-shadow:var(--glass-shadow);
+  display:flex;flex-direction:column;gap:14px;transform:translateY(12px) scale(.96);transition:transform 380ms var(--ease-out)}
+.news.on .news-card{transform:none}
+.news-card .ver{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.news-card .ver svg{width:30px;height:30px;flex:none}
+.news-card h2{margin:0;font-family:var(--display);font-size:24px;letter-spacing:-.01em;line-height:1.15}
+.news-card ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:10px}
+.news-card li{position:relative;padding-left:20px}
+.news-card li::before{content:"";position:absolute;left:2px;top:.55em;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.news-card h3{margin:6px 0 0;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+@media (prefers-reduced-motion: reduce){.news-card{transition:none;transform:none}}
 .sheet.dragging{transition:none}
 .handle{padding:10px 0 4px;display:grid;place-items:center;touch-action:none;cursor:grab}
 .handle span{width:38px;height:5px;border-radius:3px;background:var(--line)}
@@ -356,6 +369,17 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 (() => {
 'use strict';
 const KEY = 'mycost-v1';
+/* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
+const APP_VERSION = '1.1';
+const CHANGELOG = [
+  {v:'1.1', items:[
+    'Las nuevas versiones llegan en cuanto abres la app, sin esperar.',
+    'Cuando la app se actualice, te contaremos aquí qué ha cambiado.',
+    'En el ordenador, la fila de categorías de Movimientos ya se ve en su sitio.'
+  ]},
+  {v:'1.0', items:['Primera versión de MyCost.']}
+];
+const SEEN_KEY = 'mycost-seen-version';
 const eur = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR', useGrouping:'always'});
 const eur0 = new Intl.NumberFormat('es-ES', {style:'currency', currency:'EUR', maximumFractionDigits:0, useGrouping:'always'});
 const n0 = new Intl.NumberFormat('es-ES', {maximumFractionDigits:0, useGrouping:true});
@@ -822,7 +846,7 @@ function renderCats(){
       <p class="small muted">${S.lastBackup ? 'Última copia: ' + new Date(S.lastBackup).toLocaleDateString('es-ES', {day:'numeric', month:'long', year:'numeric'}) : 'Aún no has hecho ninguna copia.'}</p>
     </div>
     <button class="secondary danger" id="reset">${resetArmed ? 'Toca otra vez para borrarlo todo' : 'Borrar todos mis datos'}</button>
-    <p class="small muted" style="text-align:center">MyCost 1.0</p>`;
+    <p class="small muted" style="text-align:center">MyCost ${APP_VERSION}</p>`;
 }
 
 /* ---------- Router ---------- */
@@ -1198,7 +1222,34 @@ function toast(msg, undo){
   function hide(){ $('#toast').classList.remove('on'); }
 }
 
+/* What's new: a card after an update, closed with Entendido */
+const vnum = v => v.split('.').map(Number).reduce((a, x) => a * 1000 + x, 0);
+function whatsNew(){
+  let seen = null; try { seen = localStorage.getItem(SEEN_KEY); } catch (e) {}
+  const mark = () => { try { localStorage.setItem(SEEN_KEY, APP_VERSION); } catch (e) {} };
+  // 1.1 introduced the mark, so anyone opening 1.1 without one was on 1.0. From 1.2 on, no mark means a fresh install.
+  if (!seen && APP_VERSION !== '1.1'){ mark(); return; }
+  if (seen === APP_VERSION) return;
+  const news = CHANGELOG.filter(x => vnum(x.v) > vnum(seen || '1.0'));
+  if (!news.length){ mark(); return; }
+  const box = document.createElement('div');
+  box.className = 'news'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-labelledby', 'news-title');
+  box.innerHTML = `<div class="news-card">
+    <div class="ver">${LOGO}<span>MyCost se ha actualizado</span></div>
+    <h2 id="news-title">Novedades de la versión ${APP_VERSION}</h2>
+    ${news.map((x, i) => `${news.length > 1 ? `<h3>Versión ${x.v}</h3>` : ''}<ul>${x.items.map(t => `<li>${esc(t)}</li>`).join('')}</ul>`).join('')}
+    <button class="primary" id="news-ok">Entendido</button></div>`;
+  document.body.appendChild(box);
+  requestAnimationFrame(() => requestAnimationFrame(() => box.classList.add('on')));
+  const btn = box.querySelector('#news-ok');
+  btn.addEventListener('click', () => {
+    mark(); box.classList.remove('on');
+    setTimeout(() => box.remove(), reduceMotion() ? 0 : 280);
+  });
+}
+
 init();
+whatsNew();
 })();
 </script>
 <script>

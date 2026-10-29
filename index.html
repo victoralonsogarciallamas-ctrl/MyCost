@@ -411,8 +411,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.13';
+const APP_VERSION = '1.14';
 const CHANGELOG = [
+  {v:'1.14', items:['La tarjeta de lo gastado se abre con el filtro Débito. Pulsa Todo para ver el total.']},
   {v:'1.13', items:['En la tarjeta de lo gastado puedes filtrar por método de pago: todo, débito, crédito o Pluxee.', 'El plan de Ahorro se calcula con tu nómina: los reembolsos y otros ingresos ya no cambian la meta.']},
   {v:'1.12', items:['La tarjeta de Pluxee muestra lo que te sobró el mes anterior, que se suma a lo que recibes este mes.']},
   {v:'1.11', items:['Pluxee va aparte: ya no suma en tus ingresos ni en tu ahorro. El ahorro se calcula solo con tu cuenta.', 'Pluxee tiene su propia tarjeta en Inicio con lo recibido y lo gastado en el mes y el saldo disponible.']},
@@ -528,8 +529,8 @@ function cumulative(y, m, upto, pay = 'todos'){
 
 /* ---------- Inicio ---------- */
 // Inicio shows one month at a time; the current month by default.
-const H = {y: TY, m: TM, pay: 'todos'};
-// The month card can show only what was paid with one method.
+const H = {y: TY, m: TM, pay: 'debito'};
+// The month card can show only what was paid with one method; debit by default.
 const byPayOf = (list, pay) => pay === 'todos' ? list : list.filter(e => payOf(e) === pay);
 // Month filters list every month of this year, empty or not, plus earlier months that have movements. Newest first.
 const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`)))].sort().reverse();

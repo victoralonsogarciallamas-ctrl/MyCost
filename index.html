@@ -306,6 +306,7 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 .plx strong{font-family:var(--display);font-size:22px}
 .plx p{margin:0}
 .cc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--down) 10%,var(--surface))}
+.cc.sv{background:color-mix(in srgb,var(--accent) 9%,var(--surface))}
 .cc>div{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cc strong{font-size:16px}
 .paysw{width:10px;height:10px;border-radius:3px;display:inline-block}
@@ -393,7 +394,7 @@ const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
 const APP_VERSION = '1.5';
 const CHANGELOG = [
-  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
+  {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
   {v:'1.3', items:['Arreglado: la tarjeta de novedades no aparecía si te saltabas alguna versión.', 'El botón + vuelve a ser naranja tras la prueba de actualización.']},
   {v:'1.1', items:[
@@ -436,6 +437,8 @@ const DEFAULT_CATS = [
   {id:'otros', name:'Otros', color:'#A0886B'},
   // The monthly charge of the credit card on the account. Each purchase already counted when it was made, so this does not add to spending.
   {id:'pagotarjeta', name:'Pago tarjeta de crédito', color:'#9A86B8', xfer:true},
+  // Money moved to the savings account: it leaves the everyday account but is not spending.
+  {id:'aahorro', name:'Transferencia a ahorro', color:'#2E8B6A', xfer:true},
   {id:'nomina', name:'Nómina', color:'#1F9D6E', inc:true},
   {id:'ingotros', name:'Otros ingresos', color:'#6FAF4E', inc:true},
   {id:'reembolso', name:'Reembolso crédito', color:'#C46FA6', inc:true}
@@ -561,6 +564,7 @@ function renderInicio(){
       <figure>${svg}<figcaption><span class="key"><i></i>${cap(monthLong(TY, TM))}</span><span class="key"><i class="dash"></i>${cap(prevName)}</span></figcaption></figure></div>
     <div class="panel"><h2>En qué se va este mes</h2>${catRows || '<p class="muted">Aún no hay gastos este mes. Añade el primero con el botón +.</p>'}</div>
     ${spent ? payPanel(expOf(inMonth(TY, TM)), expOf(inMonth(py, pm)), prevName) : ''}
+    ${savingsPanel()}
     ${creditPanel()}
     <div><h2>Últimos movimientos</h2>${recent.length ? `<div class="list">${recent.map(itemHtml).join('')}</div>
       <a class="link" href="#movimientos">Ver todos los movimientos</a>` : '<p class="muted">Todavía no hay movimientos.</p>'}</div>`;
@@ -608,6 +612,25 @@ function creditPanel(){
       ${Math.abs(diff) >= 1 ? ` <span class="muted">El cargo es ${eur.format(Math.abs(diff))} ${diff > 0 ? 'mayor' : 'menor'} que lo que apuntaste con crédito: puede que falte algún gasto${diff > 0 ? '' : ' o que el banco cierre el ciclo otro día'}.</span>` : ''}</p>
     ${c.next ? `<p class="small muted" style="margin:8px 0 0">Este mes llevas ${eur.format(c.next)} con crédito, que se cargarán a principios de ${monthLong(ny, nm)}.</p>` : ''}
   </div>`;
+}
+
+/* Savings account: money only goes in. Its balance is the starting balance plus every transfer recorded. */
+function savingsAcc(y, m){
+  const all = S.expenses.filter(e => e.cat === 'aahorro');
+  const month = total(all.filter(e => e.date.startsWith(`${y}-${pad(m + 1)}-`)));
+  return {bal: r2((S.savingsStart || 0) + total(all)), month, n: all.length, any: all.length > 0 || (S.savingsStart || 0) > 0};
+}
+function savingsPanel(){
+  const a = savingsAcc(TY, TM), [py, pm] = shift(TY, TM, -1), prev = savingsAcc(py, pm).month;
+  if (!a.any) return '';
+  const inc = total(incOf(inMonth(TY, TM))), sav = r2(inc - total(expOf(inMonth(TY, TM))));
+  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Cuenta de ahorro</h2><span class="small muted">Solo entra dinero</span></div>
+    <div class="cc sv">
+      <div><span class="small muted">Saldo</span><strong class="num">${eur0.format(a.bal)}</strong></div>
+      <div><span class="small muted">Este mes</span><strong class="num down">+${eur0.format(a.month)}</strong></div>
+      <div><span class="small muted">Mes anterior</span><strong class="num">+${eur0.format(prev)}</strong></div>
+    </div>
+    <p class="small muted" style="margin:8px 0 0">${inc ? `Has apartado el ${Math.round(a.month / inc * 100)}% de lo ingresado este mes. ` : ''}${sav > 0 && a.month < sav - 1 ? `Este mes te sobran ${eur0.format(sav)}; aún podrías pasar ${eur0.format(sav - a.month)} a ahorro.` : a.month ? 'Ya has pasado a ahorro todo lo que te sobra este mes.' : ''}</p></div>`;
 }
 
 const LOGO = '<svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="var(--accent)"/><circle cx="15" cy="15" r="9" fill="none" stroke="var(--note-solid)" stroke-width="2.2"/><circle cx="15" cy="15" r="5.2" fill="none" stroke="var(--note-solid)" stroke-width="1.2" stroke-dasharray="1.6 1.6"/><circle cx="15" cy="15" r="2" fill="var(--note-solid)"/></svg>';
@@ -832,6 +855,15 @@ function renderPlan(){
       <p class="small muted" style="margin-top:8px" id="g-src">${srcTxt}${inc.src === 'manual' ? ' <button class="link small" id="g-reset">Usar el valor automático</button>' : ''}</p>
     </div>
     <div id="plan-res" style="display:flex;flex-direction:column;gap:22px"></div>
+    ${(() => { const a = savingsAcc(y, m), goal = monthIncome(k).v * pl.pct / 100; return `<div class="panel">
+      <div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Cuenta de ahorro</h2><span class="small muted">${cap(monthLong(y, m))}</span></div>
+      <div class="cc sv">
+        <div><span class="small muted">Saldo</span><strong class="num">${eur0.format(a.bal)}</strong></div>
+        <div><span class="small muted">Transferido</span><strong class="num down">+${eur0.format(a.month)}</strong></div>
+        <div><span class="small muted">Meta ${pl.pct}%</span><strong class="num ${goal && a.month >= goal - 1 ? 'down' : ''}">${goal ? Math.round(a.month / goal * 100) + '%' : '-'}</strong></div>
+      </div>
+      <p class="small muted" style="margin:8px 0 10px">${goal ? (a.month >= goal - 1 ? `Has pasado a ahorro lo que te propusiste (${eur0.format(goal)}).` : `Para llegar a tu meta te faltan ${eur0.format(goal - a.month)} por pasar a ahorro.`) : ''} Apunta cada traspaso como gasto en <b>Transferencia a ahorro</b>: no cuenta como gasto.</p>
+      <label class="incrow" for="g-start"><span>Saldo antes de empezar a usar MyCost</span><span class="incin"><input id="g-start" inputmode="decimal" value="${String(r2(S.savingsStart || 0)).replace('.', ',')}" autocomplete="off" enterkeyhint="done">€</span></label></div>`; })()}
     <div class="panel"><h2>Cómo te ha ido</h2>${planHistory()}</div>
     <button class="secondary" data-go="categorias">Categorías y copia de seguridad</button>`;
   renderPlanRes();
@@ -1028,15 +1060,17 @@ function init(){
 /* ---------- Sheet ---------- */
 let editId = null, mode = 'manual', source = 'manual';
 let kind = 'gasto', pay = 'debito';
+// Card charges and savings transfers leave the account directly, so they have no payment method to pick.
+function payVis(){ const c = document.querySelector('input[name="f-cat"]:checked'); $('#f-payf').hidden = kind === 'ingreso' || !!(c && catById(c.value).xfer); }
 function setPay(p){ pay = p; document.querySelectorAll('#f-pay button, #f-in button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === p)); }
 ['#f-pay', '#f-in'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) setPay(b.dataset.p); }));
-$('#f-cats').addEventListener('change', e => { if (!editId && e.target.name === 'f-cat') setPay(lastPayFor(e.target.value)); });
+$('#f-cats').addEventListener('change', e => { if (e.target.name !== 'f-cat') return; payVis(); if (!editId) setPay(lastPayFor(e.target.value)); });
 function setKind(k, sel){
   kind = k;
   document.querySelectorAll('#f-kind button').forEach(b => b.setAttribute('aria-pressed', b.dataset.k === k));
   const list = S.cats.filter(c => (k === 'ingreso') === !!c.inc);
   catChips(sel && list.some(c => c.id === sel) ? sel : list[0] && list[0].id, list);
-  $('#f-payf').hidden = k === 'ingreso'; $('#f-inf').hidden = k !== 'ingreso';
+  $('#f-inf').hidden = k !== 'ingreso'; payVis();
   if (!editId) $('#sheet-title').textContent = k === 'ingreso' ? 'Nuevo ingreso' : 'Nuevo gasto';
   $('#f-save').textContent = editId ? 'Guardar cambios' : (k === 'ingreso' ? 'Guardar ingreso' : 'Guardar gasto');
   $('#f-concept').placeholder = k === 'ingreso' ? 'Por ejemplo, Nómina' : 'Por ejemplo, Mercadona';
@@ -1094,7 +1128,7 @@ $('#p-manual').addEventListener('submit', ev => {
   const cat = (document.querySelector('input[name="f-cat"]:checked') || {}).value || 'otros';
   const concept = $('#f-concept').value.trim() || catById(cat).name;
   const date = $('#f-date').value || nowIso();
-  const p = catById(cat).inc ? (pay === 'pluxee' ? 'pluxee' : 'cuenta') : (PAYS.some(x => x.id === pay) ? pay : 'debito');
+  const p = catById(cat).inc ? (pay === 'pluxee' ? 'pluxee' : 'cuenta') : catById(cat).xfer ? 'debito' : (PAYS.some(x => x.id === pay) ? pay : 'debito');
   if (editId){ Object.assign(S.expenses.find(x => x.id === editId), {amount, cat, concept, date, pay: p}); toast('Cambios guardados'); }
   else { S.expenses.push({id:uid(), date, amount, concept, cat, source, pay: p}); toast(kind === 'ingreso' ? 'Ingreso guardado' : 'Gasto guardado'); }
   save(); closeSheet(); refresh();
@@ -1187,7 +1221,7 @@ const RULES = [
   [/farmacia|clinica|clínica|dentist|gimnasio|\bgym\b|fisio/i, 'salud'],
   [/cine|yelmo|cinesa|ticketmaster|entradas|fnac|casa del libro|museo|teatro/i, 'ocio']
 ];
-const guessCat = (t, income) => { if (income && /reembols|devoluci[oó]n tarjeta|abono tarjeta/i.test(t) && S.cats.some(x => x.id === 'reembolso')) return 'reembolso'; if (!income && /liquidaci[oó]n tarjeta|pago tarjeta|recibo tarjeta|cargo tarjeta|tarjeta cr[eé]dito/i.test(t) && S.cats.some(x => x.id === 'pagotarjeta')) return 'pagotarjeta'; if (income) return /n[oó]mina|salario/i.test(t) && S.cats.some(x => x.id === 'nomina') ? 'nomina' : (S.cats.find(x => x.inc) || {}).id || 'otros'; for (const [re, c] of RULES) if (re.test(t) && S.cats.some(x => x.id === c)) return c; return 'otros'; };
+const guessCat = (t, income) => { if (income && /reembols|devoluci[oó]n tarjeta|abono tarjeta/i.test(t) && S.cats.some(x => x.id === 'reembolso')) return 'reembolso'; if (!income && /traspaso|transferencia.*ahorro|cuenta (de )?ahorro|a ahorro/i.test(t) && S.cats.some(x => x.id === 'aahorro')) return 'aahorro'; if (!income && /liquidaci[oó]n tarjeta|pago tarjeta|recibo tarjeta|cargo tarjeta|tarjeta cr[eé]dito/i.test(t) && S.cats.some(x => x.id === 'pagotarjeta')) return 'pagotarjeta'; if (income) return /n[oó]mina|salario/i.test(t) && S.cats.some(x => x.id === 'nomina') ? 'nomina' : (S.cats.find(x => x.inc) || {}).id || 'otros'; for (const [re, c] of RULES) if (re.test(t) && S.cats.some(x => x.id === c)) return c; return 'otros'; };
 function splitRow(line, d){
   const out = []; let cur = '', q = false;
   for (const ch of line){ if (ch === '"') q = !q; else if (ch === d && !q) { out.push(cur.trim()); cur = ''; } else cur += ch; }
@@ -1312,9 +1346,10 @@ document.querySelector('main').addEventListener('click', e => {
 document.querySelector('main').addEventListener('input', e => {
   if (e.target.id === 'q'){ M.q = e.target.value; renderMovs(true); }
   if (e.target.id === 'g-pct'){ const pl = ensurePlan(planYM); pl.pct = +e.target.value; e.target.style.setProperty('--p', (pl.pct * 2) + '%'); $('#g-out').textContent = pl.pct + '%'; renderPlanRes(); }
+  if (e.target.id === 'g-start'){ const v = parseAmount(e.target.value); S.savingsStart = v >= 0 ? r2(v) : 0; }
   if (e.target.id === 'g-inc'){ const v = parseAmount(e.target.value); if (v > 0){ ensurePlan(planYM).income = r2(v); renderPlanRes(); } }
 });
-document.querySelector('main').addEventListener('change', e => { if (e.target.id === 'g-pct' || e.target.id === 'g-inc'){ save(); renderInicio(); renderPlan(); } });
+document.querySelector('main').addEventListener('change', e => { if (e.target.id === 'g-pct' || e.target.id === 'g-inc' || e.target.id === 'g-start'){ save(); renderInicio(); renderPlan(); } });
 document.querySelector('main').addEventListener('submit', e => {
   e.preventDefault();
   const f = e.target;
@@ -1358,7 +1393,7 @@ document.addEventListener('change', async e => {
     if (!d || !Array.isArray(d.expenses) || !Array.isArray(d.cats)) throw new Error();
     const ok = confirm(`Esta copia tiene ${d.expenses.length} movimientos. Al recuperarla se sustituyen los datos que hay ahora en el móvil. ¿Continuar?`);
     if (!ok) return;
-    S = {expenses: d.expenses, cats: d.cats, plans: d.plans || {}, lastBackup: d.lastBackup}; save(); renderAll(); toast('Copia recuperada');
+    S = {expenses: d.expenses, cats: d.cats, plans: d.plans || {}, lastBackup: d.lastBackup, savingsStart: d.savingsStart || 0}; save(); renderAll(); toast('Copia recuperada');
   } catch (err) { toast('Ese archivo no es una copia de MyCost'); }
 });
 

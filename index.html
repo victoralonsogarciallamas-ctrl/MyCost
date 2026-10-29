@@ -399,8 +399,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.7';
 const CHANGELOG = [
+  {v:'1.7', items:['En Evolución, al tocar un mes del gráfico verás sus gastos e ingresos en una etiqueta.']},
   {v:'1.6', items:['En Inicio, la tarjeta de la cuenta de ahorro aparece ahora la primera, antes de lo gastado este mes.']},
   {v:'1.5', items:['Nuevo: elige con qué pagaste cada gasto (débito, crédito o Pluxee). La app recuerda el que usas en cada categoría.', 'Los ingresos pueden llegar a tu cuenta o a Pluxee, y en Inicio verás tu saldo de Pluxee.', 'En Inicio verás cuánto llevas pagado con cada método este mes, y en Evolución cómo cambia mes a mes.', 'En Movimientos puedes filtrar por método de pago. Al importar un extracto eliges de qué tarjeta es.', 'Tus gastos anteriores cuentan como pagados con débito. Puedes cambiarlo en cada uno.', 'Nuevo control de la tarjeta de crédito en Inicio: lo gastado con crédito, el cargo en cuenta (categoría Pago tarjeta de crédito, que no suma como gasto) y lo que te van reembolsando (categoría Reembolso crédito).', 'Cuenta de ahorro: apunta cada traspaso en la categoría Transferencia a ahorro (no cuenta como gasto) y verás el saldo, lo apartado cada mes y si llegas a tu meta.', 'Inicio más limpio: el saldo de tu cuenta de ahorro tiene su propia tarjeta verde, y quitamos el gráfico Ritmo del mes.', 'En Evolución, los ingresos se ven como una línea con puntos sobre las barras de gasto.', 'La fecha de un movimiento nuevo es siempre la de hoy, aunque la app llevase días abierta. Puedes cambiarla en el calendario.']},
   {v:'1.4', items:['La barra de pestañas queda más abajo, mejor ajustada al borde de la pantalla.']},
@@ -767,6 +768,12 @@ function renderEvo(){
   const cx = i => L + i * band + band / 2;
   const incLine = `<path d="${months.map((mo, i) => `${i ? 'L' : 'M'}${cx(i).toFixed(1)},${y(mo.i).toFixed(1)}`).join('')}" fill="none" stroke="var(--down)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" pointer-events="none"/>`
     + months.map((mo, i) => `<circle cx="${cx(i).toFixed(1)}" cy="${y(mo.i).toFixed(1)}" r="${i === evoSel ? 4.6 : 3.4}" fill="${i === evoSel ? 'var(--down)' : 'var(--bg)'}" stroke="var(--down)" stroke-width="2" pointer-events="none"/>`).join('');
+  // Tooltip for the selected month: spending and income, placed above the higher of the two marks.
+  const tip = (() => { const mo = months[evoSel], tw = 112, th = 38, top0 = Math.min(y(mo.t), y(mo.i));
+    const tx = Math.max(L, Math.min(W - R - tw, cx(evoSel) - tw / 2)), ty = top0 - th - 10 < 0 ? top0 + 12 : top0 - th - 10;
+    return `<g class="tip" pointer-events="none"><rect x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" width="${tw}" height="${th}" rx="8" fill="var(--ink)"/>
+      <text x="${(tx + 9).toFixed(1)}" y="${(ty + 15).toFixed(1)}" style="fill:var(--bg);font-size:10.5px;font-weight:600">Gastos ${eur0.format(mo.t)}</text>
+      <text x="${(tx + 9).toFixed(1)}" y="${(ty + 30).toFixed(1)}" style="fill:var(--bg);font-size:10.5px">Ingresos ${eur0.format(mo.i)}</text></g>`; })();
   const avgLine = `<line x1="${L}" x2="${W - R}" y1="${y(avg)}" y2="${y(avg)}" stroke="var(--ink)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
 
   const s = months[evoSel], p = evoSel > 0 ? months[evoSel - 1] : null;
@@ -787,7 +794,7 @@ function renderEvo(){
 
   $('#v-evolucion').innerHTML = `<header class="vhead"><h1>Evolución</h1></header>
     <div><h2>Últimos 12 meses</h2>
-    <figure><svg class="bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto total por mes en los últimos 12 meses">${g}${avgLine}${bars}${incLine}</svg>
+    <figure><svg class="bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gasto total por mes en los últimos 12 meses">${g}${avgLine}${bars}${incLine}${tip}</svg>
     <figcaption style="flex-direction:column;gap:4px"><span class="key"><i style="border-top:8px solid var(--line);width:10px"></i>Gastos <i class="lk" aria-hidden="true"></i>Ingresos <i class="dash" style="margin-left:10px;border-color:var(--ink)"></i>Gasto medio</span>
     <span>Gastas de media ${eur0.format(avg)} al mes y ahorras ${eur0.format(avgSave)}. Toca un mes para ver el detalle.</span></figcaption></figure></div>
     <div class="panel" id="evo-cat"></div>

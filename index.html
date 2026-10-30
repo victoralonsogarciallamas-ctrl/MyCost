@@ -411,8 +411,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.18';
+const APP_VERSION = '1.19';
 const CHANGELOG = [
+  {v:'1.19', items:['La tarjeta de crédito funciona por ciclos del 26 al 25. Un gasto con crédito después del día 25 cuenta en el mes siguiente: en Inicio, en Movimientos, en Ahorro y en el control de la tarjeta.']},
   {v:'1.18', items:['Nuevos avisos: si pasan 24 horas sin apuntar un gasto te lo recuerdo con una notificación, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite cumplir tu meta de ahorro del mes, y cuando lo pases. Actívalos en Ahorro, en Categorías, avisos y copia de seguridad.']},
   {v:'1.17', items:['El mes que eliges en Inicio, Movimientos o Ahorro se aplica en las tres pestañas a la vez.']},
   {v:'1.16', items:['Ahora puedes importar el extracto del banco en PDF, además de Excel o CSV. Se lee en tu móvil: el archivo no sale de aquí.', 'También lee los justificantes de un solo movimiento, como el Adeudo en cuenta de Cajamar. Puedes elegir varios PDF a la vez.']},
@@ -519,13 +520,19 @@ const acctInc = list => incOf(list).filter(e => payOf(e) !== 'pluxee');
 // The savings plan works from the salary alone, so refunds and other income don't move the goal.
 const nominaOf = list => acctInc(list).filter(e => e.cat === 'nomina');
 const acctExp = list => expOf(list).filter(e => payOf(e) !== 'pluxee');
-const inMonth = (y, m) => { const p = `${y}-${pad(m + 1)}-`; return S.expenses.filter(e => e.date.startsWith(p)); };
+// The credit card cycle runs from the 26th to the 25th, so a credit purchase after the 25th counts in the next month.
+const CREDIT_CUT = 25;
+const monthOf = e => { const k = e.date.slice(0, 7);
+  if (+e.date.slice(8, 10) <= CREDIT_CUT || e.pay !== 'credito' || isInc(e)) return k;
+  const [y, m] = [+k.slice(0, 4), +k.slice(5) - 1], d = new Date(y, m + 1, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`; };
+const inMonth = (y, m) => { const k = `${y}-${pad(m + 1)}`; return S.expenses.filter(e => monthOf(e) === k); };
 const total = list => r2(list.reduce((s, e) => s + e.amount, 0));
 const byCat = list => { const o = {}; list.forEach(e => { o[e.cat] = (o[e.cat] || 0) + e.amount; }); return o; };
 const shift = (y, m, k) => { const d = new Date(y, m + k, 1); return [d.getFullYear(), d.getMonth()]; };
 function cumulative(y, m, upto, pay = 'todos'){
   const dim = daysIn(y, m), per = new Array(dim + 1).fill(0);
-  byPayOf(expOf(inMonth(y, m)), pay).forEach(e => { per[+e.date.slice(8, 10)] += e.amount; });
+  // A credit purchase carried over from last month counts from day 1.
+  byPayOf(expOf(inMonth(y, m)), pay).forEach(e => { per[e.date.startsWith(ymKey(y, m)) ? +e.date.slice(8, 10) : 1] += e.amount; });
   const out = []; let s = 0;
   for (let d = 1; d <= Math.min(upto, dim); d++){ s += per[d]; out.push(s); }
   return out;
@@ -537,7 +544,7 @@ const H = {y: TY, m: TM, pay: 'debito'};
 // The month card can show only what was paid with one method; debit by default.
 const byPayOf = (list, pay) => pay === 'todos' ? list : list.filter(e => payOf(e) === pay);
 // Month filters list every month of this year, empty or not, plus earlier months that have movements. Newest first.
-const monthList = () => [...new Set(S.expenses.map(e => e.date.slice(0, 7)).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`), ymKey(H.y, H.m)))].sort().reverse();
+const monthList = () => [...new Set(S.expenses.map(monthOf).concat(Array.from({length: 12}, (_, i) => `${TY}-${pad(i + 1)}`), ymKey(H.y, H.m)))].sort().reverse();
 // Inicio, Movimientos and Ahorro share one month: picking it in any of them moves the other two.
 function setMonth(y, m){
   H.y = y; H.m = m; M.y = y; M.m = m; M.cat = null; planYM = ymKey(y, m); noteDrawn = false;
@@ -660,7 +667,7 @@ function creditPanel(y = TY, m = TM){
   const base = c.charged || c.bought, done = base ? Math.min(1, c.back / base) : 0, rec = c.bought ? c.back / c.bought : 0;
   const diff = c.charged && c.bought ? r2(c.charged - c.bought) : 0;
   const [ny, nm] = shift(y, m, 1);
-  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Tarjeta de crédito</h2><span class="small muted">Ciclo de ${monthLong(c.py, c.pm)}</span></div>
+  return `<div class="panel"><div class="sum" style="margin-bottom:6px"><h2 style="margin:0">Tarjeta de crédito</h2><span class="small muted">Compras del ${CREDIT_CUT + 1} ${monthShort(...shift(c.py, c.pm, -1))} al ${CREDIT_CUT} ${monthShort(c.py, c.pm)}</span></div>
     <div class="cc">
       <div><span class="small muted">Gastado</span><strong class="num">${eur.format(c.bought)}</strong></div>
       <div><span class="small muted">Recuperado</span><strong class="num down">${eur.format(c.back)}</strong></div>
@@ -671,7 +678,7 @@ function creditPanel(y = TY, m = TM){
     <p class="small" style="margin:0">${!c.charged ? `Aún no has apuntado el cargo de la tarjeta de este mes. Cuando llegue, añádelo como gasto en <b>Pago tarjeta de crédito</b>.` :
       c.pending ? `Te quedan <b>${eur.format(c.pending)}</b> por recibir. Llevas ${c.n} ${c.n === 1 ? 'reembolso' : 'reembolsos'} (${Math.round(done * 100)}%).` : `Ya te han devuelto todo el cargo${c.n > 1 ? ` en ${c.n} pagos` : ''}.`}
       ${Math.abs(diff) >= 1 ? ` <span class="muted">El cargo es ${eur.format(Math.abs(diff))} ${diff > 0 ? 'mayor' : 'menor'} que lo que apuntaste con crédito: puede que falte algún gasto${diff > 0 ? '' : ' o que el banco cierre el ciclo otro día'}.</span>` : ''}</p>
-    ${c.next ? `<p class="small muted" style="margin:8px 0 0">${y === TY && m === TM ? 'Este mes llevas' : `En ${monthLong(y, m)} gastaste`} ${eur.format(c.next)} con crédito, que se ${y === TY && m === TM ? 'cargarán' : 'cargaron'} a principios de ${monthLong(ny, nm)}.</p>` : ''}
+    ${c.next ? `<p class="small muted" style="margin:8px 0 0">${y === TY && m === TM ? 'En este ciclo llevas' : `En el ciclo de ${monthLong(y, m)} gastaste`} ${eur.format(c.next)} con crédito, que se ${y === TY && m === TM ? 'cargarán' : 'cargaron'} a principios de ${monthLong(ny, nm)}.</p>` : ''}
   </div>`;
 }
 

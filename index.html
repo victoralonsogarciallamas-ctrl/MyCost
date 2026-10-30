@@ -56,6 +56,10 @@ body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);margin:0}
 .pager{position:fixed;inset:0;overflow:hidden}
 .pgtrack{display:flex;width:500%;height:100%;transition:transform 480ms var(--ease-drawer);will-change:transform;backface-visibility:hidden}
 .vhead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:10px}
+.vtools{display:flex;align-items:center;gap:10px}
+.bell{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;border:0;background:var(--accent);color:#fff;cursor:pointer;flex:none;box-shadow:0 6px 14px -6px color-mix(in srgb,var(--accent) 70%,transparent);transition:transform .15s ease}
+.bell:active{transform:scale(.94)}
+.bell.off{background:var(--accent-soft);color:var(--accent);box-shadow:none}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 .app{max-width:480px;margin:0 auto}
 button,label.btn,[role="button"]{touch-action:manipulation;user-select:none;-webkit-user-select:none;font:inherit}
@@ -411,8 +415,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.19';
+const APP_VERSION = '1.20';
 const CHANGELOG = [
+  {v:'1.20', items:['Los avisos se activan y desactivan con la campana naranja de arriba en Ahorro. Rellena significa que están activados, tachada que no.']},
   {v:'1.19', items:['La tarjeta de crédito funciona por ciclos del 26 al 25. Un gasto con crédito después del día 25 cuenta en el mes siguiente: en Inicio, en Movimientos, en Ahorro y en el control de la tarjeta.']},
   {v:'1.18', items:['Nuevos avisos: si pasan 24 horas sin apuntar un gasto te lo recuerdo con una notificación, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite cumplir tu meta de ahorro del mes, y cuando lo pases. Actívalos en Ahorro, en Categorías, avisos y copia de seguridad.']},
   {v:'1.17', items:['El mes que eliges en Inicio, Movimientos o Ahorro se aplica en las tres pestañas a la vez.']},
@@ -939,8 +944,8 @@ function renderPlan(){
     !h.med ? `Escribe tu nómina de ${monthLong(y, m)}. Cuando registres tu nómina lo tomaré de ahí.` :
     `Estimado: aún no has registrado tu nómina de ${monthLong(y, m)}, así que uso ${h.n === 1 ? 'la del mes anterior' : `la mediana de los últimos ${h.n} meses`}.`;
   $('#v-ahorro').innerHTML = `<header class="vhead"><h1>Ahorro</h1>
-      <div class="dd"><button class="ddbtn" aria-haspopup="listbox" aria-expanded="false">${cap(monthShort(y, m))} ${y}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
-      <div class="ddmenu closed" role="listbox" aria-label="Elegir mes del plan">${opts}</div></div></header>
+      <div class="vtools">${bellHtml()}<div class="dd"><button class="ddbtn" aria-haspopup="listbox" aria-expanded="false">${cap(monthShort(y, m))} ${y}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <div class="ddmenu closed" role="listbox" aria-label="Elegir mes del plan">${opts}</div></div></div></header>
     <div class="panel">
       <h2>¿Cuánto quieres ahorrar en ${monthLong(y, m)}?</h2>
       <div class="goalrow"><output class="goalpct" id="g-out" for="g-pct">${pl.pct}%</output><span class="muted" id="g-sub"></span></div>
@@ -960,7 +965,7 @@ function renderPlan(){
       <p class="small muted" style="margin:8px 0 10px">${goal ? (a.month >= goal - 1 ? `Has pasado a ahorro lo que te propusiste (${eur0.format(goal)}).` : `Para llegar a tu meta te faltan ${eur0.format(goal - a.month)} por pasar a ahorro.`) : ''} Apunta cada traspaso como gasto en <b>Transferencia a ahorro</b>: no cuenta como gasto.</p>
       <label class="incrow" for="g-start"><span>Saldo antes de empezar a usar MyCost</span><span class="incin"><input id="g-start" inputmode="decimal" value="${String(r2(S.savingsStart || 0)).replace('.', ',')}" autocomplete="off" enterkeyhint="done">€</span></label></div>`; })()}
     <div class="panel"><h2>Cómo te ha ido</h2>${planHistory()}</div>
-    <button class="secondary" data-go="categorias">Categorías, avisos y copia de seguridad</button>`;
+    <button class="secondary" data-go="categorias">Categorías y copia de seguridad</button>`;
   renderPlanRes();
 }
 function planHistory(){
@@ -1103,11 +1108,6 @@ function renderCats(){
       <button class="secondary" type="submit">Añadir categoría</button>
     </form>
     <div class="panel" style="display:flex;flex-direction:column;gap:10px">
-      <h2 style="margin:0">Avisos</h2>
-      <p class="small muted">Te recuerdo apuntar tus gastos si pasan 24 horas sin hacerlo, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite ahorrar tu meta del mes, y cuando lo pases. Para el recordatorio, solo sale del móvil la hora de tu último gasto, nunca importes ni conceptos.${/iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone ? ' En iPhone, primero instala MyCost en la pantalla de inicio.' : ''}</p>
-      <button class="secondary" id="nt-toggle">${notifOn() ? 'Desactivar avisos' : 'Activar avisos'}</button>
-    </div>
-    <div class="panel" style="display:flex;flex-direction:column;gap:10px">
       <h2 style="margin:0">Copia de seguridad</h2>
       <p class="small muted">Tus datos viven solo en este móvil. Si borras la app o cambias de teléfono, se pierden. Guarda una copia en Archivos, iCloud o Drive y recupérala cuando la necesites.</p>
       <button class="secondary" id="bk-export">Guardar copia de seguridad</button>
@@ -1175,15 +1175,20 @@ async function syncPush(){
   if (!notifOn() || !pushOk()) return;
   try { const sub = await pushSub(true); if (sub) await fetch(PUSH_URL, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'sub', sub: sub.toJSON(), last: S.lastAdd || new Date().toISOString()})}); } catch (err) {}
 }
+// Round orange bell in the Ahorro header: filled when reminders are on, crossed out when off.
+function bellHtml(){
+  const on = notifOn();
+  return `<button class="bell ${on ? '' : 'off'}" id="nt-toggle" aria-pressed="${on}" aria-label="${on ? 'Avisos activados. Toca para desactivarlos' : 'Activar avisos'}"><svg width="20" height="20" viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>${on ? '' : '<path d="M3 3l18 18"/>'}</svg></button>`;
+}
 async function toggleNotif(){
   if (notifOn()){
-    S.notif = false; save(); renderCats(); toast('Avisos desactivados');
+    S.notif = false; save(); renderPlan(); toast('Avisos desactivados');
     try { const sub = pushOk() && await pushSub(false); if (sub){ await fetch(PUSH_URL, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({action: 'unsub', sub: sub.toJSON()})}); await sub.unsubscribe(); } } catch (err) {}
     return;
   }
   if (!('Notification' in window)){ toast(/iPhone|iPad/.test(navigator.userAgent) ? 'Instala MyCost en la pantalla de inicio para recibir avisos.' : 'Este navegador no permite avisos.'); return; }
   const p = await Notification.requestPermission();
-  S.notif = p === 'granted'; save(); renderCats();
+  S.notif = p === 'granted'; save(); renderPlan();
   if (S.notif){ if (!S.lastAdd) S.lastAdd = new Date().toISOString(); save(); toast('Avisos activados'); await notify('Avisos activados', 'Te avisaré si pasas 24 horas sin apuntar un gasto y cuando te acerques al límite de tu meta.'); checkBudget(); syncPush(); }
   else toast('No me has dado permiso. Puedes darlo en los ajustes del móvil.');
 }

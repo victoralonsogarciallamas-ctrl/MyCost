@@ -415,8 +415,9 @@ table.tab{width:100%;border-collapse:collapse;font-size:14px}
 'use strict';
 const KEY = 'mycost-v1';
 /* Version notes: add an entry at the top on every release. The card shows the entries newer than the version last seen. */
-const APP_VERSION = '1.20';
+const APP_VERSION = '1.21';
 const CHANGELOG = [
+  {v:'1.21', items:['Nueva categoría de gasto: Viaje de trabajo. Al elegirla, el método de pago se pone en Crédito.']},
   {v:'1.20', items:['Los avisos se activan y desactivan con la campana naranja de arriba en Ahorro. Rellena significa que están activados, tachada que no.']},
   {v:'1.19', items:['La tarjeta de crédito funciona por ciclos del 26 al 25. Un gasto con crédito después del día 25 cuenta en el mes siguiente: en Inicio, en Movimientos, en Ahorro y en el control de la tarjeta.']},
   {v:'1.18', items:['Nuevos avisos: si pasan 24 horas sin apuntar un gasto te lo recuerdo con una notificación, aunque no abras la app. También te aviso cuando te acerques al límite de gasto que te permite cumplir tu meta de ahorro del mes, y cuando lo pases. Actívalos en Ahorro, en Categorías, avisos y copia de seguridad.']},
@@ -473,6 +474,8 @@ const DEFAULT_CATS = [
   {id:'salud', name:'Salud y deporte', color:'#2BA38F'},
   {id:'subs', name:'Suscripciones', color:'#6B7A8F'},
   {id:'otros', name:'Otros', color:'#A0886B'},
+  // Work trips are paid with the credit card, so new ones start on Crédito.
+  {id:'viaje', name:'Viaje de trabajo', color:'#2F8FB0', pay:'credito'},
   // The monthly charge of the credit card on the account. Each purchase already counted when it was made, so this does not add to spending.
   {id:'pagotarjeta', name:'Pago tarjeta de crédito', color:'#9A86B8', xfer:true},
   // Money moved to the savings account: it leaves the everyday account but is not spending.
@@ -495,7 +498,7 @@ const payById = id => PAYS.find(x => x.id === id) || INS.find(x => x.id === id) 
 const payOf = e => isInc(e) ? (e.pay === 'pluxee' ? 'pluxee' : 'cuenta') : (e.pay && PAYS.some(x => x.id === e.pay)) ? e.pay : 'debito';
 const byPay = list => { const o = {}; PAYS.forEach(x => { o[x.id] = 0; }); list.forEach(e => { o[payOf(e)] += e.amount; }); return o; };
 // The method used last time for that category, so Pluxee comes up by itself at the supermarket.
-const lastPayFor = cat => { const l = S.expenses.filter(e => e.cat === cat && e.pay).sort((a, b) => b.date.localeCompare(a.date))[0]; return l ? l.pay : catById(cat).inc ? 'cuenta' : 'debito'; };
+const lastPayFor = cat => { const l = S.expenses.filter(e => e.cat === cat && e.pay).sort((a, b) => b.date.localeCompare(a.date))[0]; return l ? l.pay : catById(cat).pay || (catById(cat).inc ? 'cuenta' : 'debito'); };
 // Pluxee balance: what was loaded minus what was spent with it, over everything recorded.
 function pluxee(list){ const inc = total(list.filter(e => isInc(e) && payOf(e) === 'pluxee')), out = total(list.filter(e => !isInc(e) && payOf(e) === 'pluxee')); return {inc, out, bal: r2(inc - out)}; }
 const EXTRA_COLORS = ['#C46A2B', '#4D9DE0', '#7A9E3B', '#B565A7', '#5E8C8A'];
